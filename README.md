@@ -447,3 +447,48 @@ GET /api/health/api-status
 
 See detailed setup guide: **[SPORTS_API_SETUP.md](SPORTS_API_SETUP.md)**
 
+
+## ☁️ Railway Deployment
+
+Deploy to Railway.app in minutes!
+
+### Quick Deploy (5 minutes)
+
+1. **Create Railway Project:** https://railway.app/new
+2. **Set Root Directory:** `backend` in Settings → Source
+3. **Add Database:** PostgreSQL + Redis
+4. **Add Environment Variables:**
+   ```env
+   SECRET_KEY=<generate-strong-key>
+   ENVIRONMENT=production
+   THE_ODDS_API_KEY=your-api-key
+   ```
+5. **Deploy!** Railway auto-detects and deploys
+
+**See:** [RAILWAY_QUICKSTART.md](RAILWAY_QUICKSTART.md) for complete guide
+
+### Files Created for Railway
+
+- ✅ `backend/start.sh` - Startup script (runs migrations + server)
+- ✅ `backend/Procfile` - Process definition
+- ✅ `backend/nixpacks.toml` - Build configuration
+- ✅ `backend/railway.toml` - Railway configuration
+- ✅ `railway.json` - Root project configuration
+
+### Railway Architecture
+
+```
+Railway Project
+├── Backend (FastAPI) → backend/ directory
+├── PostgreSQL → Auto-connected via DATABASE_URL
+└── Redis → Auto-connected via REDIS_URL
+```
+
+### Cost Estimate
+
+~$6-14/month for full production deployment:
+- PostgreSQL: $2-5/month
+- Redis: $1-2/month  
+- Backend: $2-5/month
+- Frontend (optional): $1-2/month or use Vercel (free)
+
