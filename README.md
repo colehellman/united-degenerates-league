@@ -402,3 +402,48 @@ For issues and questions:
 ---
 
 Built with FastAPI, React, and PostgreSQL | Mobile-First Design | Production-Ready
+
+## 🔄 Multi-API Failover System (NEW!)
+
+The app now uses **multiple sports data APIs** with automatic failover to ensure high availability:
+
+### Features
+- ✅ **Automatic Failover** - If one API is rate-limited or down, automatically try the next
+- ✅ **Circuit Breaker Pattern** - Temporarily skip failing APIs to prevent cascading failures
+- ✅ **Smart Caching** - Redis caching reduces API calls and improves performance
+- ✅ **Stale Data Fallback** - Return cached data if all APIs fail (better than nothing!)
+- ✅ **Real-time Monitoring** - Health endpoints show status of all APIs and circuit breakers
+
+### Supported APIs
+1. **ESPN API** (Primary)
+2. **The Odds API** (Secondary)
+3. **RapidAPI Sports** (Tertiary)
+4. **MLB Stats API** (Free, no key required)
+5. **NHL Stats API** (Free, no key required)
+
+### Quick Setup
+
+Add at least one API key to `backend/.env`:
+
+```env
+# Recommended: The Odds API (has free tier)
+THE_ODDS_API_KEY=your-odds-api-key-here
+
+# Optional: ESPN (paid, more reliable)
+ESPN_API_KEY=your-espn-api-key-here
+
+# Optional: RapidAPI (paid, good coverage)
+RAPIDAPI_KEY=your-rapidapi-key-here
+```
+
+**Free APIs (MLB, NHL) work automatically with no keys required!**
+
+### Monitoring
+
+Check API health status:
+```bash
+GET /api/health/api-status
+```
+
+See detailed setup guide: **[SPORTS_API_SETUP.md](SPORTS_API_SETUP.md)**
+

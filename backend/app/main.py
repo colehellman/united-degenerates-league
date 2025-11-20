@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
-from app.api import auth, users, competitions, picks, leaderboards, admin
+from app.api import auth, users, competitions, picks, leaderboards, admin, health
 
 # Import for lifespan
 from app.services.background_jobs import start_background_jobs, stop_background_jobs
@@ -44,6 +44,7 @@ app.include_router(competitions.router, prefix="/api/competitions", tags=["Compe
 app.include_router(picks.router, prefix="/api/picks", tags=["Picks"])
 app.include_router(leaderboards.router, prefix="/api/leaderboards", tags=["Leaderboards"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(health.router, prefix="/api/health", tags=["Health"])
 
 
 @app.get("/")

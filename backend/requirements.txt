@@ -12,3 +12,4 @@ redis==5.0.1
 httpx==0.26.0
 APScheduler==3.10.4
 python-dotenv==1.0.0
+tenacity==8.2.3
