@@ -1,0 +1,13 @@
+# Nixpacks configuration for Railway
+
+[phases.setup]
+nixPkgs = ["python310", "postgresql"]
+
+[phases.install]
+cmds = ["cd backend && pip install -r requirements.txt"]
+
+[phases.build]
+cmds = ["echo 'Build phase complete'"]
+
+[start]
+cmd = "sh start.sh"
