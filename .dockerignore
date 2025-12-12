@@ -1,0 +1,69 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+.pytest_cache
+.coverage
+htmlcov
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (frontend)
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Documentation
+*.md
+!README.md
+
+# Frontend build output
+frontend/dist
+frontend/build
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+postgres_data
+redis_data
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml

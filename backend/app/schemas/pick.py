@@ -1,11 +1,15 @@
 from pydantic import BaseModel, UUID4
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 
 class PickCreate(BaseModel):
     game_id: UUID4
     predicted_winner_team_id: UUID4
+
+
+class PickBatchCreate(BaseModel):
+    picks: List[PickCreate]
 
 
 class PickUpdate(BaseModel):
@@ -32,6 +36,10 @@ class PickResponse(BaseModel):
 class FixedTeamSelectionCreate(BaseModel):
     team_id: Optional[UUID4] = None
     golfer_id: Optional[UUID4] = None
+
+
+class FixedTeamSelectionBatchCreate(BaseModel):
+    selections: List[FixedTeamSelectionCreate]
 
 
 class FixedTeamSelectionResponse(BaseModel):

@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(python -m alembic:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(git add:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(python3 -m alembic revision:*)",
+      "Bash(alembic revision:*)",
+      "Bash(python -m scripts.seed_data:*)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []

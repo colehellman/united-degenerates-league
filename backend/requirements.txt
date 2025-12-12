@@ -13,3 +13,9 @@ httpx==0.26.0
 APScheduler==3.10.4
 python-dotenv==1.0.0
 tenacity==8.2.3
+
+# Testing dependencies
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==4.1.0
+faker==22.5.1
