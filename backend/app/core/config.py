@@ -1,5 +1,6 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Union
 
 
 class Settings(BaseSettings):
@@ -18,8 +19,13 @@ class Settings(BaseSettings):
     # Environment
     ENVIRONMENT: str = "development"
 
-    # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+    # CORS — stored as comma-separated string, parsed to list at runtime
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Parse CORS_ORIGINS string into a list."""
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     # Sports Data APIs - Multiple providers for failover
     # ESPN API
@@ -75,12 +81,18 @@ class Settings(BaseSettings):
     CACHE_SCHEDULE_SECONDS: int = 3600  # 1 hour for schedules
     CACHE_API_RESPONSE_SECONDS: int = 300  # 5 minutes for API responses
 
+    # Monitoring
+    SENTRY_DSN: str = ""
+
     # Background Jobs
     SCORE_UPDATE_INTERVAL_SECONDS: int = 60
+    # Set to True on API instances when running a separate worker process
+    DISABLE_BACKGROUND_JOBS: bool = False
 
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"
 
 
 settings = Settings()

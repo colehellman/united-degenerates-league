@@ -1,5 +1,5 @@
 from typing import AsyncGenerator, Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,7 +8,8 @@ from app.db.session import AsyncSessionLocal
 from app.models.user import User, UserRole
 from app.core.security import verify_token
 
-security = HTTPBearer()
+# auto_error=False so unauthenticated requests don't 403 before we check cookies
+security = HTTPBearer(auto_error=False)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -21,17 +22,32 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    access_token_cookie: Optional[str] = Cookie(None, alias="access_token"),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Get current authenticated user from JWT token"""
+    """Get current authenticated user from JWT token.
+
+    Checks for token in this order:
+    1. Authorization: Bearer <token> header
+    2. access_token httpOnly cookie
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    token = credentials.credentials
+    # Extract token: prefer header, fall back to cookie
+    token = None
+    if credentials:
+        token = credentials.credentials
+    elif access_token_cookie:
+        token = access_token_cookie
+
+    if not token:
+        raise credentials_exception
+
     payload = verify_token(token, "access")
 
     if payload is None:
@@ -79,13 +95,14 @@ async def get_current_global_admin(
 
 async def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    access_token_cookie: Optional[str] = Cookie(None, alias="access_token"),
     db: AsyncSession = Depends(get_db),
 ) -> Optional[User]:
     """Get current user if authenticated, None otherwise"""
-    if credentials is None:
+    if credentials is None and access_token_cookie is None:
         return None
 
     try:
-        return await get_current_user(credentials, db)
+        return await get_current_user(credentials, access_token_cookie, db)
     except HTTPException:
         return None

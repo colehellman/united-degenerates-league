@@ -208,8 +208,7 @@ lerna-debug.log*
 *.sln
 *.sw?
 
-# Package manager files
-package-lock.json
+# Package manager files (keep package-lock.json for reproducible builds)
 yarn.lock
 pnpm-lock.yaml
 

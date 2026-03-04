@@ -50,7 +50,7 @@ async def test_user(db_session: AsyncSession):
     user = User(
         email="test@example.com",
         username="testuser",
-        hashed_password=get_password_hash("password123"),
+        hashed_password=get_password_hash("Password123"),
         role=UserRole.USER,
         status=AccountStatus.ACTIVE,
     )
@@ -150,7 +150,7 @@ async def test_user_registration(client: AsyncClient):
         json={
             "email": "newuser@example.com",
             "username": "newuser",
-            "password": "securepassword123",
+            "password": "securePassword123",
         }
     )
     assert response.status_code == 201
@@ -167,7 +167,7 @@ async def test_user_login(client: AsyncClient, test_user: User):
         "/api/auth/login",
         data={
             "username": "test@example.com",
-            "password": "password123",
+            "password": "Password123",
         }
     )
     assert response.status_code == 200
@@ -200,7 +200,7 @@ async def test_list_competitions(client: AsyncClient, test_user: User, test_comp
         "/api/auth/login",
         data={
             "username": "test@example.com",
-            "password": "password123",
+            "password": "Password123",
         }
     )
     token = login_response.json()["access_token"]
@@ -224,7 +224,7 @@ async def test_join_competition(client: AsyncClient, test_user: User, test_compe
         "/api/auth/login",
         data={
             "username": "test@example.com",
-            "password": "password123",
+            "password": "Password123",
         }
     )
     token = login_response.json()["access_token"]
@@ -272,7 +272,7 @@ async def test_submit_daily_pick(
         "/api/auth/login",
         data={
             "username": "test@example.com",
-            "password": "password123",
+            "password": "Password123",
         }
     )
     token = login_response.json()["access_token"]
@@ -334,7 +334,7 @@ async def test_cannot_submit_pick_after_game_starts(
         "/api/auth/login",
         data={
             "username": "test@example.com",
-            "password": "password123",
+            "password": "Password123",
         }
     )
     token = login_response.json()["access_token"]
@@ -491,7 +491,7 @@ async def test_leaderboard_calculation(
         "/api/auth/login",
         data={
             "username": "test@example.com",
-            "password": "password123",
+            "password": "Password123",
         }
     )
     token = login_response.json()["access_token"]

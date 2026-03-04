@@ -1,4 +1,4 @@
-from pydantic import BaseModel, UUID4
+from pydantic import BaseModel, Field, UUID4
 from datetime import datetime
 from typing import Optional, List
 
@@ -9,7 +9,7 @@ class PickCreate(BaseModel):
 
 
 class PickBatchCreate(BaseModel):
-    picks: List[PickCreate]
+    picks: List[PickCreate] = Field(..., max_length=50)
 
 
 class PickUpdate(BaseModel):
@@ -39,7 +39,7 @@ class FixedTeamSelectionCreate(BaseModel):
 
 
 class FixedTeamSelectionBatchCreate(BaseModel):
-    selections: List[FixedTeamSelectionCreate]
+    selections: List[FixedTeamSelectionCreate] = Field(..., max_length=50)
 
 
 class FixedTeamSelectionResponse(BaseModel):

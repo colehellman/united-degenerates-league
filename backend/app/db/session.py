@@ -9,6 +9,10 @@ engine = create_async_engine(
     database_url,
     echo=settings.ENVIRONMENT == "development",
     future=True,
+    pool_size=5,
+    max_overflow=10,
+    pool_timeout=30,
+    pool_recycle=1800,
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -16,6 +20,9 @@ AsyncSessionLocal = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+# Alias used by background_jobs.py and other non-request contexts
+async_session = AsyncSessionLocal
 
 Base = declarative_base()
 

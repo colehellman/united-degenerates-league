@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, Float
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, Float, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -63,7 +63,3 @@ class JoinRequest(Base):
     # Relationships
     user = relationship("User", back_populates="join_requests", foreign_keys=[user_id])
     competition = relationship("Competition", back_populates="join_requests")
-
-
-# Need to import String for rejection_reason
-from sqlalchemy import String

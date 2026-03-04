@@ -20,43 +20,35 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  isAuthenticated: !!localStorage.getItem('access_token'),
+  isAuthenticated: false,
 
   login: async (email, password) => {
     const response = await api.post('/auth/login', { email, password })
-    const { access_token, refresh_token, user } = response.data
-
-    localStorage.setItem('access_token', access_token)
-    localStorage.setItem('refresh_token', refresh_token)
-
-    set({ user, isAuthenticated: true })
+    // Tokens are now set as httpOnly cookies by the backend.
+    // We only use the response body for the user object.
+    set({ user: response.data.user, isAuthenticated: true })
   },
 
   register: async (email, username, password) => {
     const response = await api.post('/auth/register', { email, username, password })
-    const { access_token, refresh_token, user } = response.data
-
-    localStorage.setItem('access_token', access_token)
-    localStorage.setItem('refresh_token', refresh_token)
-
-    set({ user, isAuthenticated: true })
+    set({ user: response.data.user, isAuthenticated: true })
   },
 
-  logout: () => {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
+  logout: async () => {
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      // Best-effort — even if the call fails, clear local state
+    }
     set({ user: null, isAuthenticated: false })
   },
 
   checkAuth: async () => {
     try {
-      if (localStorage.getItem('access_token')) {
-        const response = await api.get('/users/me')
-        set({ user: response.data, isAuthenticated: true })
-      }
-    } catch (error) {
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
+      // Cookie is sent automatically — if valid, we get user data back
+      const response = await api.get('/users/me')
+      set({ user: response.data, isAuthenticated: true })
+    } catch {
       set({ user: null, isAuthenticated: false })
     }
   },

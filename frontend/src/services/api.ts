@@ -7,26 +7,56 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Send httpOnly cookies on every request
+  withCredentials: true,
 })
 
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
+// Track whether a refresh is already in-flight to avoid infinite loops
+let isRefreshing = false
+let refreshSubscribers: ((token: string) => void)[] = []
 
-// Handle auth errors
+function onTokenRefreshed(token: string) {
+  refreshSubscribers.forEach((cb) => cb(token))
+  refreshSubscribers = []
+}
+
+function addRefreshSubscriber(cb: (token: string) => void) {
+  refreshSubscribers.push(cb)
+}
+
+// Handle auth errors with automatic token refresh
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
-      window.location.href = '/login'
+  async (error) => {
+    const originalRequest = error.config
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        // Queue this request until the refresh completes
+        return new Promise((resolve) => {
+          addRefreshSubscriber((token: string) => {
+            resolve(api(originalRequest))
+          })
+        })
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      try {
+        // Attempt refresh — cookie is sent automatically
+        const res = await api.post('/auth/refresh')
+        onTokenRefreshed(res.data.access_token)
+        return api(originalRequest)
+      } catch (refreshError) {
+        // Refresh failed — force re-login
+        window.location.href = '/login'
+        return Promise.reject(refreshError)
+      } finally {
+        isRefreshing = false
+      }
     }
+
     return Promise.reject(error)
   }
 )

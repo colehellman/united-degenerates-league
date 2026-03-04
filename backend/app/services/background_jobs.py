@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.db.session import async_session
+from app.services.ws_manager import ScoreManager
 from app.models.game import Game, GameStatus
 from app.models.pick import Pick, FixedTeamSelection
 from app.models.competition import Competition, CompetitionStatus
@@ -225,6 +226,25 @@ async def update_game_scores():
             # Commit all updates
             await db.commit()
             logger.info(f"Score update completed: {len(updated_games)} games updated")
+
+            # Push live scores to WebSocket clients
+            if updated_games:
+                ws_payload = [
+                    {
+                        "game_id": str(g.id),
+                        "status": g.status.value if hasattr(g.status, 'value') else str(g.status),
+                        "home_score": g.home_team_score,
+                        "away_score": g.away_team_score,
+                        "home_team_id": str(g.home_team_id),
+                        "away_team_id": str(g.away_team_id),
+                        "winner_team_id": str(g.winner_team_id) if g.winner_team_id else None,
+                    }
+                    for g in updated_games
+                ]
+                # Publish via Redis pub/sub so the API process can forward
+                # to WebSocket clients (works for both single-process and
+                # separate worker deployments)
+                await ScoreManager.publish_score_update(ws_payload)
 
             # Invalidate relevant caches (if Redis available)
             if updated_games and sports_service.redis_client:
