@@ -19,7 +19,7 @@ from sqlalchemy import select
 
 from app.models.user import User, UserRole, AccountStatus
 from app.models.competition import Competition, CompetitionMode, CompetitionStatus, Visibility, JoinType
-from app.models.league import League, Team
+from app.models.league import League, LeagueName, Team
 from app.models.game import Game, GameStatus
 from app.models.participant import Participant
 from app.models.pick import Pick
@@ -27,6 +27,16 @@ from app.core.security import get_password_hash
 
 # db_session and client fixtures are in conftest.py
 
+
+# ── Helper ───────────────────────────────────────────────────────────
+
+async def _login(client: AsyncClient, email: str = "test@example.com", password: str = "Password123") -> str:
+    """Login and return the access token."""
+    resp = await client.post("/api/auth/login", json={"email": email, "password": password})
+    return resp.json()["access_token"]
+
+
+# ── Fixtures ─────────────────────────────────────────────────────────
 
 @pytest.fixture
 async def test_user(db_session: AsyncSession):
@@ -48,8 +58,8 @@ async def test_user(db_session: AsyncSession):
 async def test_league(db_session: AsyncSession):
     """Create a test league"""
     league = League(
-        name="Test League",
-        sport="Football",
+        name=LeagueName.NFL,
+        display_name="National Football League",
     )
     db_session.add(league)
     await db_session.commit()
@@ -97,7 +107,7 @@ async def test_competition(db_session: AsyncSession, test_league: League, test_u
         join_type=JoinType.OPEN,
         max_picks_per_day=10,
         creator_id=test_user.id,
-        league_admin_ids=[str(test_user.id)],
+        league_admin_ids=[test_user.id],
     )
     db_session.add(competition)
     await db_session.commit()
@@ -124,11 +134,11 @@ async def test_game(db_session: AsyncSession, test_competition: Competition, tes
     return game
 
 
-# Authentication Tests
+# ── Authentication Tests ─────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_user_registration(client: AsyncClient):
-    """Test user registration endpoint"""
+    """Test user registration endpoint — returns TokenResponse"""
     response = await client.post(
         "/api/auth/register",
         json={
@@ -139,18 +149,19 @@ async def test_user_registration(client: AsyncClient):
     )
     assert response.status_code == 201
     data = response.json()
-    assert data["email"] == "newuser@example.com"
-    assert data["username"] == "newuser"
-    assert "id" in data
+    assert "access_token" in data
+    assert "refresh_token" in data
+    assert data["user"]["email"] == "newuser@example.com"
+    assert data["user"]["username"] == "newuser"
 
 
 @pytest.mark.asyncio
 async def test_user_login(client: AsyncClient, test_user: User):
-    """Test user login endpoint"""
+    """Test user login endpoint — accepts JSON UserLogin"""
     response = await client.post(
         "/api/auth/login",
-        data={
-            "username": "test@example.com",
+        json={
+            "email": "test@example.com",
             "password": "Password123",
         }
     )
@@ -166,30 +177,21 @@ async def test_login_invalid_credentials(client: AsyncClient, test_user: User):
     """Test login with invalid credentials"""
     response = await client.post(
         "/api/auth/login",
-        data={
-            "username": "test@example.com",
+        json={
+            "email": "test@example.com",
             "password": "wrongpassword",
         }
     )
     assert response.status_code == 401
 
 
-# Competition Tests
+# ── Competition Tests ────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_list_competitions(client: AsyncClient, test_user: User, test_competition: Competition):
     """Test listing competitions"""
-    # Login first
-    login_response = await client.post(
-        "/api/auth/login",
-        data={
-            "username": "test@example.com",
-            "password": "Password123",
-        }
-    )
-    token = login_response.json()["access_token"]
+    token = await _login(client)
 
-    # List competitions
     response = await client.get(
         "/api/competitions",
         headers={"Authorization": f"Bearer {token}"}
@@ -203,17 +205,8 @@ async def test_list_competitions(client: AsyncClient, test_user: User, test_comp
 @pytest.mark.asyncio
 async def test_join_competition(client: AsyncClient, test_user: User, test_competition: Competition, db_session: AsyncSession):
     """Test joining a competition"""
-    # Login first
-    login_response = await client.post(
-        "/api/auth/login",
-        data={
-            "username": "test@example.com",
-            "password": "Password123",
-        }
-    )
-    token = login_response.json()["access_token"]
+    token = await _login(client)
 
-    # Join competition
     response = await client.post(
         f"/api/competitions/{test_competition.id}/join",
         headers={"Authorization": f"Bearer {token}"}
@@ -231,7 +224,7 @@ async def test_join_competition(client: AsyncClient, test_user: User, test_compe
     assert participant is not None
 
 
-# Pick Submission Tests
+# ── Pick Submission Tests ────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_submit_daily_pick(
@@ -251,17 +244,8 @@ async def test_submit_daily_pick(
     db_session.add(participant)
     await db_session.commit()
 
-    # Login
-    login_response = await client.post(
-        "/api/auth/login",
-        data={
-            "username": "test@example.com",
-            "password": "Password123",
-        }
-    )
-    token = login_response.json()["access_token"]
+    token = await _login(client)
 
-    # Submit pick
     response = await client.post(
         f"/api/picks/{test_competition.id}/daily",
         headers={"Authorization": f"Bearer {token}"},
@@ -313,17 +297,8 @@ async def test_cannot_submit_pick_after_game_starts(
     await db_session.commit()
     await db_session.refresh(game)
 
-    # Login
-    login_response = await client.post(
-        "/api/auth/login",
-        data={
-            "username": "test@example.com",
-            "password": "Password123",
-        }
-    )
-    token = login_response.json()["access_token"]
+    token = await _login(client)
 
-    # Attempt to submit pick
     response = await client.post(
         f"/api/picks/{test_competition.id}/daily",
         headers={"Authorization": f"Bearer {token}"},
@@ -340,7 +315,7 @@ async def test_cannot_submit_pick_after_game_starts(
     assert "already started" in response.json()["detail"].lower()
 
 
-# Pick Locking Tests
+# ── Pick Locking Tests ───────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_pick_locking(db_session: AsyncSession, test_user: User, test_competition: Competition, test_teams: list[Team]):
@@ -393,7 +368,7 @@ async def test_pick_locking(db_session: AsyncSession, test_user: User, test_comp
     # For now, this demonstrates the locking mechanism
 
 
-# Game Scoring Tests
+# ── Game Scoring Tests ───────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_pick_scoring(db_session: AsyncSession, test_user: User, test_competition: Competition, test_teams: list[Team]):
@@ -448,7 +423,7 @@ async def test_pick_scoring(db_session: AsyncSession, test_user: User, test_comp
     assert pick_correct.points_earned == 1
 
 
-# Leaderboard Tests
+# ── Leaderboard Tests ────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_leaderboard_calculation(
@@ -470,17 +445,8 @@ async def test_leaderboard_calculation(
     db_session.add(participant)
     await db_session.commit()
 
-    # Login
-    login_response = await client.post(
-        "/api/auth/login",
-        data={
-            "username": "test@example.com",
-            "password": "Password123",
-        }
-    )
-    token = login_response.json()["access_token"]
+    token = await _login(client)
 
-    # Get leaderboard
     response = await client.get(
         f"/api/leaderboards/{test_competition.id}",
         headers={"Authorization": f"Bearer {token}"}
@@ -497,7 +463,7 @@ async def test_leaderboard_calculation(
     assert user_entry["rank"] == 1  # Should be rank 1 since only participant
 
 
-# Competition Status Transition Tests
+# ── Competition Status Transition Tests ──────────────────────────────
 
 @pytest.mark.asyncio
 async def test_competition_status_transition(db_session: AsyncSession, test_user: User, test_league: League):
@@ -515,7 +481,7 @@ async def test_competition_status_transition(db_session: AsyncSession, test_user
         visibility=Visibility.PUBLIC,
         join_type=JoinType.OPEN,
         creator_id=test_user.id,
-        league_admin_ids=[str(test_user.id)],
+        league_admin_ids=[test_user.id],
     )
     db_session.add(competition)
     await db_session.commit()
