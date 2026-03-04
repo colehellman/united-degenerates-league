@@ -33,7 +33,6 @@ services:
         value: "false"  # Jobs run in-process on free tier (single instance)
       - key: SENTRY_DSN
         value: ""
-    startCommand: "bash start.sh"
 
   # ── Frontend (Static Site — CDN-backed, never sleeps) ───
   - type: web
