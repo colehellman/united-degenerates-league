@@ -245,7 +245,7 @@ async def delete_competition(
     return {"message": "Competition deleted successfully"}
 
 
-@router.post("/{competition_id}/join", response_model=JoinRequestResponse)
+@router.post("/{competition_id}/join")
 async def join_competition(
     competition_id: str,
     current_user: User = Depends(get_current_user),
