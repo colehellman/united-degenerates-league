@@ -108,9 +108,14 @@ Frontend (`frontend/.env`):
 
 ## Deployment
 
-Railway.app with 3 services:
-1. **API** (`backend/Dockerfile`) — `DISABLE_BACKGROUND_JOBS=true`
-2. **Worker** (`backend/Dockerfile.worker`) — runs APScheduler jobs
-3. **Frontend** (`frontend/Dockerfile`) — nginx serving built React app
+**Render.com** (free tier) with `render.yaml` blueprint:
+1. **API** — Render Web Service (Docker, `backend/Dockerfile`)
+2. **Frontend** — Render Static Site (CDN-backed, never sleeps)
+3. **Postgres** — Neon (free, 0.5GB)
+4. **Redis** — Upstash (free, 10k cmds/day)
+
+Background jobs run in-process with the API on free tier. For paid tier,
+set `DISABLE_BACKGROUND_JOBS=true` on API and deploy `worker.py` separately
+via `backend/Dockerfile.worker`.
 
 CI: `.github/workflows/ci.yml` runs on PR/push to main.

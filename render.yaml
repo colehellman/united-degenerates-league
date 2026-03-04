@@ -1,0 +1,60 @@
+# Render Blueprint — one-click deploy
+# https://render.com/docs/blueprint-spec
+#
+# Prerequisites (set up before deploying):
+#   1. Neon Postgres — https://neon.tech (free, 0.5GB)
+#   2. Upstash Redis  — https://upstash.com (free, 10k cmds/day)
+#
+# After creating those, plug the connection strings into the
+# environment variables below via the Render dashboard.
+
+services:
+  # ── Backend API ──────────────────────────────────────────
+  - type: web
+    name: udl-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true  # Render auto-generates a random value
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false  # Must be set manually — paste your Neon connection string
+      - key: REDIS_URL
+        sync: false  # Must be set manually — paste your Upstash Redis URL
+      - key: CORS_ORIGINS
+        sync: false  # Set to your frontend URL after first deploy
+      - key: DISABLE_BACKGROUND_JOBS
+        value: "false"  # Jobs run in-process on free tier (single instance)
+      - key: SENTRY_DSN
+        value: ""
+    startCommand: "bash start.sh"
+
+  # ── Frontend (Static Site — CDN-backed, never sleeps) ───
+  - type: web
+    name: udl-frontend
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    rootDir: ./frontend
+    plan: free
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+    routes:
+      # SPA fallback — all paths serve index.html
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false  # Set to your backend URL after first deploy

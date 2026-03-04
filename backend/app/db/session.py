@@ -5,6 +5,11 @@ from app.core.config import settings
 # Convert postgresql:// to postgresql+asyncpg://
 database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
+# Neon and other cloud Postgres providers require SSL
+connect_args = {}
+if "neon.tech" in database_url or settings.ENVIRONMENT == "production":
+    connect_args["ssl"] = True
+
 engine = create_async_engine(
     database_url,
     echo=settings.ENVIRONMENT == "development",
@@ -13,6 +18,7 @@ engine = create_async_engine(
     max_overflow=10,
     pool_timeout=30,
     pool_recycle=1800,
+    connect_args=connect_args,
 )
 
 AsyncSessionLocal = async_sessionmaker(
