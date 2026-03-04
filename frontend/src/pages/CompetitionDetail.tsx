@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import api from '../services/api'
@@ -63,15 +63,18 @@ export default function CompetitionDetail() {
       return response.data
     },
     enabled: !!competition?.user_is_participant && competition?.mode === 'daily_picks',
-    onSuccess: (data) => {
-      // Pre-populate picks state with existing picks
+  })
+
+  // Pre-populate picks state when data arrives
+  useEffect(() => {
+    if (userPicks) {
       const picksMap: Record<string, string> = {}
-      data.forEach((pick: any) => {
+      userPicks.forEach((pick: any) => {
         picksMap[pick.game_id] = pick.predicted_winner_team_id
       })
       setPicks(picksMap)
-    },
-  })
+    }
+  }, [userPicks])
 
   // Fetch available teams/golfers for fixed teams mode
   const { data: availableSelections } = useQuery({
@@ -91,11 +94,15 @@ export default function CompetitionDetail() {
       return response.data
     },
     enabled: !!competition?.user_is_participant && competition?.mode === 'fixed_teams',
-    onSuccess: (data) => {
-      const selections = data.map((sel: any) => sel.team_id || sel.golfer_id)
-      setFixedSelections(selections)
-    },
   })
+
+  // Pre-populate fixed selections state when data arrives
+  useEffect(() => {
+    if (userFixedSelections) {
+      const selections = userFixedSelections.map((sel: any) => sel.team_id || sel.golfer_id)
+      setFixedSelections(selections)
+    }
+  }, [userFixedSelections])
 
   // Submit daily picks mutation
   const submitPicksMutation = useMutation({
@@ -104,8 +111,8 @@ export default function CompetitionDetail() {
       return response.data
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['user-picks', id])
-      queryClient.invalidateQueries(['leaderboard', id])
+      queryClient.invalidateQueries({ queryKey: ['user-picks', id] })
+      queryClient.invalidateQueries({ queryKey: ['leaderboard', id] })
       setError('')
     },
     onError: (err: any) => {
@@ -120,8 +127,8 @@ export default function CompetitionDetail() {
       return response.data
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['user-fixed-selections', id])
-      queryClient.invalidateQueries(['available-selections', id])
+      queryClient.invalidateQueries({ queryKey: ['user-fixed-selections', id] })
+      queryClient.invalidateQueries({ queryKey: ['available-selections', id] })
       setError('')
     },
     onError: (err: any) => {
@@ -136,7 +143,7 @@ export default function CompetitionDetail() {
       return response.data
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['competition', id])
+      queryClient.invalidateQueries({ queryKey: ['competition', id] })
     },
     onError: (err: any) => {
       setError(err.response?.data?.detail || 'Failed to join competition')
@@ -457,10 +464,10 @@ export default function CompetitionDetail() {
                   <div className="sticky bottom-0 bg-white border-t pt-4 -mx-6 px-6 -mb-6 pb-6">
                     <button
                       onClick={handleSubmitPicks}
-                      disabled={submitPicksMutation.isLoading || getPicksCount() === 0}
+                      disabled={submitPicksMutation.isPending || getPicksCount() === 0}
                       className="btn btn-primary w-full"
                     >
-                      {submitPicksMutation.isLoading ? 'Submitting...' : `Submit ${getPicksCount()} Pick${getPicksCount() !== 1 ? 's' : ''}`}
+                      {submitPicksMutation.isPending ? 'Submitting...' : `Submit ${getPicksCount()} Pick${getPicksCount() !== 1 ? 's' : ''}`}
                     </button>
                   </div>
                 </>
@@ -570,10 +577,10 @@ export default function CompetitionDetail() {
                         </div>
                         <button
                           onClick={handleSubmitFixedSelections}
-                          disabled={submitFixedSelectionsMutation.isLoading || fixedSelections.length === 0}
+                          disabled={submitFixedSelectionsMutation.isPending || fixedSelections.length === 0}
                           className="btn btn-primary w-full"
                         >
-                          {submitFixedSelectionsMutation.isLoading
+                          {submitFixedSelectionsMutation.isPending
                             ? 'Submitting...'
                             : `Submit Selections`}
                         </button>
@@ -599,10 +606,10 @@ export default function CompetitionDetail() {
           )}
           <button
             onClick={() => joinMutation.mutate()}
-            disabled={joinMutation.isLoading}
+            disabled={joinMutation.isPending}
             className="btn btn-primary"
           >
-            {joinMutation.isLoading
+            {joinMutation.isPending
               ? 'Joining...'
               : competition.join_type === 'open'
               ? 'Join Now'

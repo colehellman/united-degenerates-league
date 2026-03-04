@@ -38,6 +38,7 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       SECRET_KEY: ci-test-secret-key-not-for-production
       ENVIRONMENT: test
+      DISABLE_BACKGROUND_JOBS: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

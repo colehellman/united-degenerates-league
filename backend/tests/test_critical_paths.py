@@ -17,8 +17,6 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.main import app
-from app.db.session import async_session
 from app.models.user import User, UserRole, AccountStatus
 from app.models.competition import Competition, CompetitionMode, CompetitionStatus, Visibility, JoinType
 from app.models.league import League, Team
@@ -27,21 +25,7 @@ from app.models.participant import Participant
 from app.models.pick import Pick
 from app.core.security import get_password_hash
 
-
-# Fixtures
-
-@pytest.fixture
-async def db_session():
-    """Create a database session for testing"""
-    async with async_session() as session:
-        yield session
-
-
-@pytest.fixture
-async def client():
-    """Create an HTTP client for testing"""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        yield ac
+# db_session and client fixtures are in conftest.py
 
 
 @pytest.fixture

@@ -34,7 +34,7 @@ api.interceptors.response.use(
       if (isRefreshing) {
         // Queue this request until the refresh completes
         return new Promise((resolve) => {
-          addRefreshSubscriber((token: string) => {
+          addRefreshSubscriber((_token: string) => {
             resolve(api(originalRequest))
           })
         })
