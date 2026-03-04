@@ -19,14 +19,23 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # -- Enum types ----------------------------------------------------------
+    leaguename_enum = sa.Enum(
+        'NFL', 'NBA', 'MLB', 'NHL', 'NCAA_BASKETBALL', 'NCAA_FOOTBALL',
+        'PGA', 'MLS', 'EPL', 'UCL',
+        name='leaguename',
+    )
+
     # Create leagues table
     op.create_table(
         'leagues',
         sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('name', sa.String(), nullable=False),
-        sa.Column('sport', sa.String(), nullable=False),
+        sa.Column('name', leaguename_enum, nullable=False),
+        sa.Column('display_name', sa.String(), nullable=False),
+        sa.Column('is_team_based', sa.Boolean(), nullable=False, server_default='true'),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('updated_at', sa.DateTime(), nullable=False),
+        sa.UniqueConstraint('name', name='uq_leagues_name'),
     )
     op.create_index('ix_leagues_id', 'leagues', ['id'])
     op.create_index('ix_leagues_name', 'leagues', ['name'])
@@ -36,30 +45,40 @@ def upgrade() -> None:
         'teams',
         sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column('league_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('external_id', sa.String(), nullable=False),
         sa.Column('name', sa.String(), nullable=False),
-        sa.Column('abbreviation', sa.String(), nullable=True),
+        sa.Column('abbreviation', sa.String(), nullable=False),
         sa.Column('city', sa.String(), nullable=True),
-        sa.Column('external_id', sa.String(), nullable=True),
+        sa.Column('logo_url', sa.String(), nullable=True),
+        sa.Column('primary_color', sa.String(), nullable=True),
+        sa.Column('is_active', sa.Boolean(), nullable=False, server_default='true'),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('updated_at', sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(['league_id'], ['leagues.id']),
     )
     op.create_index('ix_teams_id', 'teams', ['id'])
     op.create_index('ix_teams_league_id', 'teams', ['league_id'])
-    op.create_index('ix_teams_name', 'teams', ['name'])
+    op.create_index('ix_teams_external_id', 'teams', ['external_id'])
 
     # Create golfers table
     op.create_table(
         'golfers',
         sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('name', sa.String(), nullable=False),
-        sa.Column('country', sa.String(), nullable=True),
-        sa.Column('external_id', sa.String(), nullable=True),
+        sa.Column('league_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('external_id', sa.String(), nullable=False),
+        sa.Column('first_name', sa.String(), nullable=False),
+        sa.Column('last_name', sa.String(), nullable=False),
+        sa.Column('full_name', sa.String(), nullable=False),
+        sa.Column('photo_url', sa.String(), nullable=True),
+        sa.Column('is_active', sa.Boolean(), nullable=False, server_default='true'),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('updated_at', sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(['league_id'], ['leagues.id']),
     )
     op.create_index('ix_golfers_id', 'golfers', ['id'])
-    op.create_index('ix_golfers_name', 'golfers', ['name'])
+    op.create_index('ix_golfers_league_id', 'golfers', ['league_id'])
+    op.create_index('ix_golfers_external_id', 'golfers', ['external_id'])
+    op.create_index('ix_golfers_full_name', 'golfers', ['full_name'])
 
     # Create users table
     op.create_table(
@@ -248,17 +267,24 @@ def upgrade() -> None:
     op.create_table(
         'audit_logs',
         sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('action', sa.String(), nullable=False),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('target_type', sa.String(), nullable=True),
+        sa.Column('admin_user_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('action', sa.Enum(
+            'COMPETITION_CREATED', 'COMPETITION_DELETED', 'COMPETITION_STATUS_CHANGED',
+            'COMPETITION_SETTINGS_CHANGED', 'USER_DELETED', 'USER_ROLE_CHANGED',
+            'ADMIN_ADDED', 'ADMIN_REMOVED', 'SCORE_CORRECTED', 'WINNER_DESIGNATED',
+            'JOIN_REQUEST_APPROVED', 'JOIN_REQUEST_REJECTED',
+            name='auditaction',
+        ), nullable=False),
+        sa.Column('target_type', sa.String(), nullable=False),
         sa.Column('target_id', postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column('details', postgresql.JSON(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id']),
+        sa.ForeignKeyConstraint(['admin_user_id'], ['users.id']),
     )
     op.create_index('ix_audit_logs_id', 'audit_logs', ['id'])
-    op.create_index('ix_audit_logs_user_id', 'audit_logs', ['user_id'])
+    op.create_index('ix_audit_logs_admin_user_id', 'audit_logs', ['admin_user_id'])
     op.create_index('ix_audit_logs_action', 'audit_logs', ['action'])
+    op.create_index('ix_audit_logs_target_id', 'audit_logs', ['target_id'])
     op.create_index('ix_audit_logs_created_at', 'audit_logs', ['created_at'])
 
     # Create composite indexes for common queries
@@ -281,6 +307,7 @@ def downgrade() -> None:
     op.drop_table('leagues')
 
     # Drop enums
+    op.execute('DROP TYPE IF EXISTS auditaction')
     op.execute('DROP TYPE IF EXISTS joinrequeststatus')
     op.execute('DROP TYPE IF EXISTS gamestatus')
     op.execute('DROP TYPE IF EXISTS jointype')
@@ -289,3 +316,4 @@ def downgrade() -> None:
     op.execute('DROP TYPE IF EXISTS competitionmode')
     op.execute('DROP TYPE IF EXISTS accountstatus')
     op.execute('DROP TYPE IF EXISTS userrole')
+    op.execute('DROP TYPE IF EXISTS leaguename')

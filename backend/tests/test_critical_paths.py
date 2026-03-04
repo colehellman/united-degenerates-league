@@ -433,14 +433,14 @@ async def test_leaderboard_calculation(
     db_session: AsyncSession
 ):
     """Test leaderboard calculation"""
-    # Create participant with some stats
+    # Create participant with some stats (use actual Participant model fields)
     participant = Participant(
         user_id=test_user.id,
         competition_id=test_competition.id,
         total_points=10,
-        total_correct_picks=10,
-        total_incorrect_picks=5,
-        total_picks=15,
+        total_wins=8,
+        total_losses=2,
+        accuracy_percentage=80.0,
     )
     db_session.add(participant)
     await db_session.commit()
@@ -455,11 +455,11 @@ async def test_leaderboard_calculation(
     data = response.json()
     assert len(data) > 0
 
-    # Verify participant is in leaderboard
+    # Verify participant is in leaderboard (LeaderboardEntry schema fields)
     user_entry = next((entry for entry in data if entry["user_id"] == str(test_user.id)), None)
     assert user_entry is not None
     assert user_entry["total_points"] == 10
-    assert user_entry["total_correct_picks"] == 10
+    assert user_entry["total_wins"] == 8
     assert user_entry["rank"] == 1  # Should be rank 1 since only participant
 
 
