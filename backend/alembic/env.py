@@ -34,8 +34,13 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set the database URL from settings
+# Set the database URL from settings — strip sslmode (asyncpg uses ssl=True instead)
 database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+if "sslmode=" in database_url:
+    from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
+    _parsed = urlparse(database_url)
+    _params = {k: v[0] for k, v in parse_qs(_parsed.query).items() if k != "sslmode"}
+    database_url = urlunparse(_parsed._replace(query=urlencode(_params)))
 config.set_main_option("sqlalchemy.url", database_url)
 
 # add your model's MetaData object here
@@ -85,10 +90,16 @@ async def run_async_migrations() -> None:
 
     """
 
+    # Pass ssl=True for cloud Postgres (Neon, etc.)
+    connect_args = {}
+    if "neon.tech" in database_url or settings.ENVIRONMENT == "production":
+        connect_args["ssl"] = True
+
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:
