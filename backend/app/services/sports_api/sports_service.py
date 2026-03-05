@@ -38,10 +38,11 @@ class SportsDataService:
         # Initialize API clients in priority order
         self.clients: List[BaseSportsAPIClient] = []
 
-        # Initialize ESPN client (primary)
-        if settings.ESPN_API_KEY:
-            self.clients.append(ESPNAPIClient())
-            logger.info("SportsDataService: ESPN API client initialized")
+        # ESPN hidden API is always available (no key required).
+        # If a key is set it will be passed as a query parameter,
+        # but the public scoreboard endpoints work without one.
+        self.clients.append(ESPNAPIClient())
+        logger.info("SportsDataService: ESPN API client initialized (no key required)")
 
         # Initialize The Odds API client (secondary)
         if settings.THE_ODDS_API_KEY:
@@ -324,7 +325,9 @@ class SportsDataService:
             logger.error(f"Redis set error: {e}")
 
     def _serialize_games(self, games: List[GameData]) -> str:
-        """Serialize GameData objects to JSON"""
+        """Serialize GameData objects to JSON for Redis cache.
+        Only stores fields relevant to competition rules — no raw API bloat.
+        """
         data = []
         for game in games:
             data.append({
@@ -336,7 +339,10 @@ class SportsDataService:
                 "home_score": game.home_score,
                 "away_score": game.away_score,
                 "venue": game.venue,
-                "raw_data": game.raw_data,
+                "home_team_external_id": game.home_team_external_id,
+                "away_team_external_id": game.away_team_external_id,
+                "home_team_abbreviation": game.home_team_abbreviation,
+                "away_team_abbreviation": game.away_team_abbreviation,
             })
         return json.dumps(data)
 
@@ -357,7 +363,10 @@ class SportsDataService:
                     home_score=game_dict.get("home_score"),
                     away_score=game_dict.get("away_score"),
                     venue=game_dict.get("venue"),
-                    raw_data=game_dict.get("raw_data", {}),
+                    home_team_external_id=game_dict.get("home_team_external_id"),
+                    away_team_external_id=game_dict.get("away_team_external_id"),
+                    home_team_abbreviation=game_dict.get("home_team_abbreviation"),
+                    away_team_abbreviation=game_dict.get("away_team_abbreviation"),
                 )
                 games.append(game)
             return games

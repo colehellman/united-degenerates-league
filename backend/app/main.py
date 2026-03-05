@@ -12,7 +12,7 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
-from app.api import auth, users, competitions, picks, leaderboards, admin, health, ws
+from app.api import auth, users, competitions, picks, leaderboards, admin, health, ws, leagues
 
 # Import for lifespan
 from app.services.background_jobs import start_background_jobs, stop_background_jobs
@@ -38,6 +38,32 @@ if settings.ENVIRONMENT == "production" and settings.SENTRY_DSN:
 limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
 
 
+async def _seed_leagues_if_empty():
+    """Auto-seed leagues on first boot. Idempotent — skips if leagues already exist."""
+    from sqlalchemy import select, func
+    from app.models.league import League, LeagueName
+
+    async with AsyncSessionLocal() as db:
+        count = await db.scalar(select(func.count()).select_from(League))
+        if count and count > 0:
+            return
+
+        logger.info("No leagues found — seeding default leagues...")
+        default_leagues = [
+            (LeagueName.NFL, "National Football League", True),
+            (LeagueName.NBA, "National Basketball Association", True),
+            (LeagueName.MLB, "Major League Baseball", True),
+            (LeagueName.NHL, "National Hockey League", True),
+            (LeagueName.NCAA_BASKETBALL, "NCAA Men's Basketball", True),
+            (LeagueName.NCAA_FOOTBALL, "NCAA Football", True),
+            (LeagueName.PGA, "PGA Tour", False),
+        ]
+        for name, display_name, is_team_based in default_leagues:
+            db.add(League(name=name, display_name=display_name, is_team_based=is_team_based))
+        await db.commit()
+        logger.info(f"Seeded {len(default_leagues)} leagues")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events"""
@@ -46,6 +72,9 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("SECRET_KEY must be changed in production. Set the SECRET_KEY environment variable.")
 
     logger.info("Starting United Degenerates League API...")
+
+    # Auto-seed leagues if none exist (idempotent)
+    await _seed_leagues_if_empty()
 
     # Start background jobs unless running a separate worker process
     if not settings.DISABLE_BACKGROUND_JOBS:
@@ -107,6 +136,7 @@ app.include_router(competitions.router, prefix="/api/competitions", tags=["Compe
 app.include_router(picks.router, prefix="/api/picks", tags=["Picks"])
 app.include_router(leaderboards.router, prefix="/api/leaderboards", tags=["Leaderboards"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(leagues.router, prefix="/api/leagues", tags=["Leagues"])
 app.include_router(health.router, prefix="/api/health", tags=["Health"])
 app.include_router(ws.router, prefix="/ws", tags=["WebSocket"])
 

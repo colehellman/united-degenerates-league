@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import async_session
-from app.models.league import League, Team
+from app.models.league import League, LeagueName, Team
 from app.models.user import User, UserRole, AccountStatus
 from app.models.competition import Competition, CompetitionMode, CompetitionStatus, Visibility, JoinType
 from app.models.game import Game, GameStatus
@@ -102,8 +102,9 @@ async def create_leagues_and_teams(db: AsyncSession):
     # Create NFL League
     nfl = League(
         id=uuid.uuid4(),
-        name="NFL",
-        sport="Football",
+        name=LeagueName.NFL,
+        display_name="National Football League",
+        is_team_based=True,
     )
     db.add(nfl)
     await db.flush()
@@ -129,8 +130,9 @@ async def create_leagues_and_teams(db: AsyncSession):
     # Create NBA League
     nba = League(
         id=uuid.uuid4(),
-        name="NBA",
-        sport="Basketball",
+        name=LeagueName.NBA,
+        display_name="National Basketball Association",
+        is_team_based=True,
     )
     db.add(nba)
     await db.flush()
@@ -153,6 +155,7 @@ async def create_leagues_and_teams(db: AsyncSession):
 
     print(f"Created {len(NBA_TEAMS)} NBA teams")
 
+    await db.flush()
     await db.commit()
 
     return {

@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Competitions from './pages/Competitions'
 import CompetitionDetail from './pages/CompetitionDetail'
+import CreateCompetition from './pages/CreateCompetition'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -20,6 +21,7 @@ function App() {
         <Route element={<Layout />}>
           <Route path="/" element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />} />
           <Route path="/competitions" element={isAuthenticated ? <Competitions /> : <Navigate to="/login" />} />
+          <Route path="/competitions/create" element={isAuthenticated ? <CreateCompetition /> : <Navigate to="/login" />} />
           <Route path="/competitions/:id" element={isAuthenticated ? <CompetitionDetail /> : <Navigate to="/login" />} />
         </Route>
       </Routes>

@@ -72,7 +72,11 @@ class ESPNAPIClient(BaseSportsAPIClient):
             return []
 
     async def get_live_scores(self, league: str) -> List[GameData]:
-        """Fetch live scores from ESPN API"""
+        """Fetch today's scoreboard from ESPN API.
+
+        Returns ALL games (scheduled, in-progress, final) so the background
+        job can create new games, update scores, and detect completed games.
+        """
         try:
             league_path = self._map_league_name(league)
             url = f"{self.base_url}/{league_path}/scoreboard"
@@ -86,21 +90,18 @@ class ESPNAPIClient(BaseSportsAPIClient):
             games = []
             events = response.get("events", [])
 
-            # Filter for live/in-progress games
             for event in events:
-                status = event.get("status", {}).get("type", {}).get("state", "")
-                if status.lower() in ["in", "live"]:
-                    game_data = self._parse_event(event)
-                    if game_data:
-                        games.append(game_data)
+                game_data = self._parse_event(event)
+                if game_data:
+                    games.append(game_data)
 
-            logger.info(f"ESPN: Fetched {len(games)} live games for {league}")
+            logger.info(f"ESPN: Fetched {len(games)} games for {league}")
             return games
 
         except RateLimitExceededError:
             raise
         except Exception as e:
-            logger.error(f"ESPN: Error fetching live scores for {league}: {str(e)}")
+            logger.error(f"ESPN: Error fetching scores for {league}: {str(e)}")
             return []
 
     async def get_game_details(self, league: str, game_id: str) -> Optional[GameData]:
@@ -145,20 +146,24 @@ class ESPNAPIClient(BaseSportsAPIClient):
             away_team = None
 
             for competitor in competitors:
-                team_name = competitor.get("team", {}).get("displayName", "")
+                team_data = competitor.get("team", {})
+                team_name = team_data.get("displayName", "")
+                team_abbr = team_data.get("abbreviation", "")
+                team_ext_id = team_data.get("id", "")
                 score = competitor.get("score")
                 home_away = competitor.get("homeAway", "")
 
+                info = {
+                    "name": team_name,
+                    "score": int(score) if score and score.isdigit() else None,
+                    "external_id": str(team_ext_id),
+                    "abbreviation": team_abbr,
+                }
+
                 if home_away == "home":
-                    home_team = {
-                        "name": team_name,
-                        "score": int(score) if score and score.isdigit() else None,
-                    }
+                    home_team = info
                 else:
-                    away_team = {
-                        "name": team_name,
-                        "score": int(score) if score and score.isdigit() else None,
-                    }
+                    away_team = info
 
             if not home_team or not away_team:
                 return None
@@ -188,7 +193,11 @@ class ESPNAPIClient(BaseSportsAPIClient):
                 home_score=home_team["score"],
                 away_score=away_team["score"],
                 venue=venue,
-                raw_data=event,
+                raw_data={},  # We only store fields relevant to competition rules
+                home_team_external_id=home_team["external_id"],
+                away_team_external_id=away_team["external_id"],
+                home_team_abbreviation=home_team["abbreviation"],
+                away_team_abbreviation=away_team["abbreviation"],
             )
 
         except Exception as e:

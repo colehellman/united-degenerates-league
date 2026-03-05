@@ -22,9 +22,14 @@ export default function Dashboard() {
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Dashboard</h1>
-        <Link to="/competitions" className="btn btn-primary">
-          Browse Competitions
-        </Link>
+        <div className="flex gap-3">
+          <Link to="/competitions/create" className="btn btn-primary">
+            Create Competition
+          </Link>
+          <Link to="/competitions" className="btn bg-gray-200 text-gray-700 hover:bg-gray-300">
+            Browse Competitions
+          </Link>
+        </div>
       </div>
 
       {activeCompetitions.length === 0 && upcomingCompetitions.length === 0 && (

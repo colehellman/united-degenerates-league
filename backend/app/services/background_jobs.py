@@ -2,7 +2,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime, timedelta
 import logging
-from typing import List
+from typing import List, Optional
 from sqlalchemy import select, and_, or_, update
 from sqlalchemy.orm import selectinload
 
@@ -14,7 +14,9 @@ from app.models.pick import Pick, FixedTeamSelection
 from app.models.competition import Competition, CompetitionStatus
 from app.models.participant import Participant
 from app.models.user import User, AccountStatus
+from app.models.league import League, Team
 from app.services.sports_api.sports_service import sports_service
+from app.services.sports_api.base import GameData
 
 logger = logging.getLogger(__name__)
 
@@ -478,6 +480,185 @@ async def cleanup_pending_deletions():
             await db.rollback()
 
 
+async def sync_games_from_api():
+    """
+    Import today's games from ESPN into the database for active competitions.
+    Runs every 5 minutes.
+
+    Process:
+    1. Get all ACTIVE + UPCOMING competitions and their leagues
+    2. Fetch today's scoreboard from ESPN for each unique league
+    3. Find-or-create Team rows from ESPN team data
+    4. Find-or-create Game rows (by external_id per competition)
+    5. Update scores/status for existing games
+    """
+    logger.info(f"Running game sync job at {datetime.utcnow()}")
+
+    async with async_session() as db:
+        try:
+            # Get active/upcoming competitions with their leagues
+            stmt = (
+                select(Competition)
+                .where(Competition.status.in_([CompetitionStatus.ACTIVE, CompetitionStatus.UPCOMING]))
+                .options(selectinload(Competition.league))
+            )
+            result = await db.execute(stmt)
+            competitions = result.scalars().all()
+
+            if not competitions:
+                logger.debug("No active competitions to sync games for")
+                return
+
+            # Group competitions by league to avoid duplicate API calls
+            comps_by_league = {}
+            for comp in competitions:
+                league_name = comp.league.name
+                league_key = league_name.value if hasattr(league_name, 'value') else str(league_name)
+                if league_key not in comps_by_league:
+                    comps_by_league[league_key] = {"league": comp.league, "competitions": []}
+                comps_by_league[league_key]["competitions"].append(comp)
+
+            total_created = 0
+            total_updated = 0
+
+            for league_key, data in comps_by_league.items():
+                league = data["league"]
+                league_comps = data["competitions"]
+
+                try:
+                    # Fetch today's scoreboard from ESPN (cached for 60s)
+                    api_games = await sports_service.get_live_scores(league_key)
+
+                    if not api_games:
+                        logger.debug(f"No games from ESPN for {league_key}")
+                        continue
+
+                    # Build team cache for this league: external_id -> Team
+                    team_stmt = select(Team).where(Team.league_id == league.id)
+                    team_result = await db.execute(team_stmt)
+                    existing_teams = {t.external_id: t for t in team_result.scalars().all()}
+
+                    for game_data in api_games:
+                        # Find or create home team
+                        home_team = await _find_or_create_team(
+                            db, league.id, game_data.home_team,
+                            game_data.home_team_external_id,
+                            game_data.home_team_abbreviation,
+                            existing_teams,
+                        )
+                        away_team = await _find_or_create_team(
+                            db, league.id, game_data.away_team,
+                            game_data.away_team_external_id,
+                            game_data.away_team_abbreviation,
+                            existing_teams,
+                        )
+
+                        if not home_team or not away_team:
+                            continue
+
+                        # For each competition using this league, sync the game
+                        for comp in league_comps:
+                            created, updated = await _sync_game_for_competition(
+                                db, comp, game_data, home_team, away_team,
+                            )
+                            total_created += created
+                            total_updated += updated
+
+                except Exception as e:
+                    logger.error(f"Error syncing games for {league_key}: {str(e)}")
+                    continue
+
+            await db.commit()
+            logger.info(f"Game sync completed: {total_created} created, {total_updated} updated")
+
+        except Exception as e:
+            logger.error(f"Error in sync_games_from_api: {str(e)}", exc_info=True)
+            await db.rollback()
+
+
+async def _find_or_create_team(
+    db, league_id, name: str, external_id: str, abbreviation: str,
+    cache: dict,
+) -> Optional[Team]:
+    """Find existing team by external_id or create a new one."""
+    if not external_id:
+        return None
+
+    # Check in-memory cache first
+    if external_id in cache:
+        return cache[external_id]
+
+    # Create new team
+    team = Team(
+        league_id=league_id,
+        name=name,
+        external_id=external_id,
+        abbreviation=abbreviation or name[:3].upper(),
+    )
+    db.add(team)
+    await db.flush()  # get the ID
+
+    cache[external_id] = team
+    logger.info(f"Created team: {name} ({abbreviation})")
+    return team
+
+
+async def _sync_game_for_competition(
+    db, competition: Competition, game_data: GameData,
+    home_team: Team, away_team: Team,
+) -> tuple:
+    """Sync a single game for a competition. Returns (created_count, updated_count)."""
+    # Check if game already exists for this competition
+    stmt = select(Game).where(
+        and_(
+            Game.competition_id == competition.id,
+            Game.external_id == game_data.external_id,
+        )
+    )
+    result = await db.execute(stmt)
+    existing_game = result.scalar_one_or_none()
+
+    if existing_game:
+        # Update scores and status
+        was_not_final = existing_game.status != GameStatus.FINAL
+        new_status = GameStatus(game_data.status)
+
+        existing_game.status = new_status
+        existing_game.home_team_score = game_data.home_score
+        existing_game.away_team_score = game_data.away_score
+        existing_game.updated_at = datetime.utcnow()
+
+        # Determine winner when game becomes final
+        if new_status == GameStatus.FINAL and game_data.home_score is not None and game_data.away_score is not None:
+            if game_data.home_score > game_data.away_score:
+                existing_game.winner_team_id = home_team.id
+            elif game_data.away_score > game_data.home_score:
+                existing_game.winner_team_id = away_team.id
+            else:
+                existing_game.winner_team_id = None  # Tie
+
+        # Score picks when game just completed
+        if was_not_final and new_status == GameStatus.FINAL:
+            await _score_picks_for_game(db, existing_game)
+
+        return (0, 1)
+    else:
+        # Create new game
+        game = Game(
+            competition_id=competition.id,
+            external_id=game_data.external_id,
+            home_team_id=home_team.id,
+            away_team_id=away_team.id,
+            scheduled_start_time=game_data.scheduled_start_time,
+            status=GameStatus(game_data.status),
+            home_team_score=game_data.home_score,
+            away_team_score=game_data.away_score,
+            venue_name=game_data.venue,
+        )
+        db.add(game)
+        return (1, 0)
+
+
 def start_background_jobs():
     """Start all background jobs"""
     logger.info("Starting background jobs...")
@@ -506,6 +687,16 @@ def start_background_jobs():
         trigger=IntervalTrigger(seconds=60),
         id="lock_expired_picks",
         name="Lock picks for started games",
+        replace_existing=True,
+    )
+
+    # Sync games from ESPN (every 5 minutes)
+    # Creates new Game rows and updates scores for active competitions
+    scheduler.add_job(
+        sync_games_from_api,
+        trigger=IntervalTrigger(minutes=5),
+        id="sync_games_from_api",
+        name="Import games from ESPN into database",
         replace_existing=True,
     )
 

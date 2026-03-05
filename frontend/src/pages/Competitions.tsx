@@ -19,6 +19,9 @@ export default function Competitions() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Browse Competitions</h1>
+        <Link to="/competitions/create" className="btn btn-primary">
+          Create Competition
+        </Link>
       </div>
 
       {competitions && competitions.length > 0 ? (

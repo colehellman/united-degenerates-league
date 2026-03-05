@@ -35,6 +35,11 @@ class GameData:
         away_score: Optional[int] = None,
         venue: Optional[str] = None,
         raw_data: Optional[Dict] = None,
+        # Team identifiers for matching/creating team records
+        home_team_external_id: Optional[str] = None,
+        away_team_external_id: Optional[str] = None,
+        home_team_abbreviation: Optional[str] = None,
+        away_team_abbreviation: Optional[str] = None,
     ):
         self.external_id = external_id
         self.home_team = home_team
@@ -45,6 +50,10 @@ class GameData:
         self.away_score = away_score
         self.venue = venue
         self.raw_data = raw_data or {}
+        self.home_team_external_id = home_team_external_id
+        self.away_team_external_id = away_team_external_id
+        self.home_team_abbreviation = home_team_abbreviation
+        self.away_team_abbreviation = away_team_abbreviation
 
 
 class BaseSportsAPIClient(ABC):
