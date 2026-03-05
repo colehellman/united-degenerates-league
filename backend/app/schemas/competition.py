@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field, UUID4
-from datetime import datetime
+from pydantic import BaseModel, Field, UUID4, field_validator
+from datetime import datetime, timezone
 from typing import Optional, List
 from app.models.competition import CompetitionMode, CompetitionStatus, Visibility, JoinType
 
@@ -11,6 +11,19 @@ class CompetitionBase(BaseModel):
     league_id: UUID4
     start_date: datetime
     end_date: datetime
+
+    @field_validator("start_date", "end_date", mode="after")
+    @classmethod
+    def strip_timezone(cls, v: datetime) -> datetime:
+        """Convert tz-aware datetimes to naive UTC.
+
+        The database uses TIMESTAMP WITHOUT TIME ZONE, so asyncpg rejects
+        mixing tz-aware values (from JSON 'Z' suffix) with naive values
+        (from datetime.utcnow defaults on created_at/updated_at).
+        """
+        if v.tzinfo is not None:
+            v = v.astimezone(timezone.utc).replace(tzinfo=None)
+        return v
     display_timezone: str = "UTC"
     visibility: Visibility = Visibility.PRIVATE
     join_type: JoinType = JoinType.REQUIRES_APPROVAL
@@ -29,6 +42,14 @@ class CompetitionUpdate(BaseModel):
     description: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+
+    @field_validator("start_date", "end_date", mode="after")
+    @classmethod
+    def strip_timezone(cls, v: Optional[datetime]) -> Optional[datetime]:
+        """Same naive-UTC normalization as CompetitionBase."""
+        if v is not None and v.tzinfo is not None:
+            v = v.astimezone(timezone.utc).replace(tzinfo=None)
+        return v
     display_timezone: Optional[str] = None
     visibility: Optional[Visibility] = None
     join_type: Optional[JoinType] = None

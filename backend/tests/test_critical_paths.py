@@ -570,6 +570,32 @@ async def test_create_competition_with_all_options(client: AsyncClient, test_use
 
 
 @pytest.mark.asyncio
+async def test_create_competition_tz_aware_dates(client: AsyncClient, test_user: User, test_league: League):
+    """Test that ISO dates with 'Z' suffix (tz-aware) don't crash asyncpg.
+
+    Browsers send '2026-03-10T00:00:00.000Z' but the DB uses
+    TIMESTAMP WITHOUT TIME ZONE.  The schema must strip tzinfo so asyncpg
+    doesn't choke mixing tz-aware and naive datetimes in the same INSERT.
+    """
+    token = await _login(client)
+
+    response = await client.post(
+        "/api/competitions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "name": "TZ Aware Dates Test",
+            "mode": "daily_picks",
+            "league_id": str(test_league.id),
+            "start_date": "2026-03-10T00:00:00Z",
+            "end_date": "2026-03-17T00:00:00Z",
+            "visibility": "public",
+            "join_type": "open",
+        }
+    )
+    assert response.status_code == 201, f"Expected 201, got {response.status_code}: {response.text}"
+
+
+@pytest.mark.asyncio
 async def test_create_competition_invalid_dates(client: AsyncClient, test_user: User, test_league: League):
     """Test that end_date before start_date is rejected."""
     token = await _login(client)
