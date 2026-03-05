@@ -40,7 +40,7 @@ async def create_competition(
     competition = Competition(
         **competition_data.model_dump(),
         creator_id=current_user.id,
-        league_admin_ids=[str(current_user.id)],  # Creator is default admin
+        league_admin_ids=[current_user.id],  # Creator is default admin
         status=CompetitionStatus.UPCOMING,
     )
 

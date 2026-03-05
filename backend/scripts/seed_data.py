@@ -236,7 +236,7 @@ async def create_sample_competitions(db: AsyncSession, leagues_data, users):
         max_participants=None,
         max_picks_per_day=10,
         creator_id=admin.id,
-        league_admin_ids=[str(admin.id)],
+        league_admin_ids=[admin.id],
     )
     db.add(nfl_comp)
     competitions.append(nfl_comp)
@@ -313,7 +313,7 @@ async def create_sample_competitions(db: AsyncSession, leagues_data, users):
         max_participants=50,
         max_picks_per_day=15,
         creator_id=admin.id,
-        league_admin_ids=[str(admin.id)],
+        league_admin_ids=[admin.id],
     )
     db.add(nba_comp)
     competitions.append(nba_comp)
@@ -374,7 +374,7 @@ async def create_sample_competitions(db: AsyncSession, leagues_data, users):
         max_participants=20,
         max_teams_per_participant=3,
         creator_id=admin.id,
-        league_admin_ids=[str(admin.id)],
+        league_admin_ids=[admin.id],
     )
     db.add(nfl_fixed)
     competitions.append(nfl_fixed)
