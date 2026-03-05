@@ -83,7 +83,15 @@ export default function CreateCompetition() {
       const response = await api.post('/competitions', payload)
       navigate(`/competitions/${response.data.id}`)
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create competition')
+      const detail = err.response?.data?.detail
+      if (Array.isArray(detail)) {
+        // Pydantic 422 validation errors — extract human-readable messages
+        setError(detail.map((e: any) => e.msg).join('; '))
+      } else if (typeof detail === 'string') {
+        setError(detail)
+      } else {
+        setError(err.message || 'Failed to create competition')
+      }
     } finally {
       setLoading(false)
     }

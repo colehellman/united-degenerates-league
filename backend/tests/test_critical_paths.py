@@ -501,6 +501,95 @@ async def test_competition_status_transition(db_session: AsyncSession, test_user
     assert competition.status == CompetitionStatus.ACTIVE
 
 
+# ── Competition Creation Tests ──────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_create_competition(client: AsyncClient, test_user: User, test_league: League):
+    """Test creating a competition via POST /api/competitions.
+
+    This exercises the full request path: Pydantic validation → model_dump()
+    unpacking → SQLAlchemy insert → response serialization. It catches
+    type errors (e.g. str vs UUID) and schema mismatches that ORM-only
+    fixtures miss.
+    """
+    token = await _login(client)
+
+    response = await client.post(
+        "/api/competitions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "name": "Test Daily Picks",
+            "mode": "daily_picks",
+            "league_id": str(test_league.id),
+            "start_date": (datetime.utcnow() + timedelta(days=1)).isoformat(),
+            "end_date": (datetime.utcnow() + timedelta(days=7)).isoformat(),
+            "visibility": "public",
+            "join_type": "open",
+        }
+    )
+    assert response.status_code == 201, f"Expected 201, got {response.status_code}: {response.text}"
+
+    data = response.json()
+    assert data["name"] == "Test Daily Picks"
+    assert data["mode"] == "daily_picks"
+    assert data["status"] == "upcoming"
+    assert data["participant_count"] == 1  # Creator auto-joined
+    assert data["user_is_participant"] is True
+    assert data["user_is_admin"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_competition_with_all_options(client: AsyncClient, test_user: User, test_league: League):
+    """Test creating a competition with every optional field set."""
+    token = await _login(client)
+
+    response = await client.post(
+        "/api/competitions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "name": "Full Options Comp",
+            "description": "Testing all fields",
+            "mode": "daily_picks",
+            "league_id": str(test_league.id),
+            "start_date": (datetime.utcnow() + timedelta(days=1)).isoformat(),
+            "end_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
+            "display_timezone": "America/New_York",
+            "visibility": "private",
+            "join_type": "requires_approval",
+            "max_participants": 20,
+            "max_picks_per_day": 10,
+        }
+    )
+    assert response.status_code == 201, f"Expected 201, got {response.status_code}: {response.text}"
+
+    data = response.json()
+    assert data["max_participants"] == 20
+    assert data["max_picks_per_day"] == 10
+    assert data["visibility"] == "private"
+    assert data["join_type"] == "requires_approval"
+
+
+@pytest.mark.asyncio
+async def test_create_competition_invalid_dates(client: AsyncClient, test_user: User, test_league: League):
+    """Test that end_date before start_date is rejected."""
+    token = await _login(client)
+
+    response = await client.post(
+        "/api/competitions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "name": "Bad Dates",
+            "mode": "daily_picks",
+            "league_id": str(test_league.id),
+            "start_date": (datetime.utcnow() + timedelta(days=7)).isoformat(),
+            "end_date": (datetime.utcnow() + timedelta(days=1)).isoformat(),
+            "visibility": "public",
+            "join_type": "open",
+        }
+    )
+    assert response.status_code == 400
+
+
 if __name__ == "__main__":
     # Run tests with: python -m pytest backend/tests/test_critical_paths.py -v
     import sys
