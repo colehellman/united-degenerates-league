@@ -1,4 +1,5 @@
 import axios from 'axios'
+import toast from 'react-hot-toast'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -30,6 +31,11 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
+    // Show error message for non-auth errors
+    if (error.response?.status !== 401) {
+      toast.error(error.response?.data?.detail || 'An unexpected error occurred')
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
         // Queue this request until the refresh completes
@@ -50,6 +56,7 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch (refreshError) {
         // Refresh failed — force re-login
+        localStorage.removeItem('access_token')
         window.location.href = '/login'
         return Promise.reject(refreshError)
       } finally {
@@ -58,7 +65,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error)
-  }
+  },
 )
 
 export default api

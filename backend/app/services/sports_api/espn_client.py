@@ -193,7 +193,7 @@ class ESPNAPIClient(BaseSportsAPIClient):
                 home_score=home_team["score"],
                 away_score=away_team["score"],
                 venue=venue,
-                raw_data={},  # We only store fields relevant to competition rules
+                raw_data=event,
                 home_team_external_id=home_team["external_id"],
                 away_team_external_id=away_team["external_id"],
                 home_team_abbreviation=home_team["abbreviation"],

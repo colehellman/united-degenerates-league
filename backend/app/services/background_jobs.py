@@ -194,6 +194,8 @@ async def update_game_scores():
                         game.status = GameStatus(score_data.status)
                         game.home_team_score = score_data.home_score
                         game.away_team_score = score_data.away_score
+                        if score_data.raw_data:
+                            game.api_data = score_data.raw_data
 
                         # Determine winner (NULL for ties, cancelled, or no result)
                         if game.status == GameStatus.FINAL:
@@ -526,8 +528,8 @@ async def sync_games_from_api():
                 league_comps = data["competitions"]
 
                 try:
-                    # Fetch today's scoreboard from ESPN (cached for 60s)
-                    api_games = await sports_service.get_live_scores(league_key)
+                    # Fetch today's scoreboard from ESPN (bypass cache to ensure raw data is present)
+                    api_games = await sports_service.get_live_scores(league_key, use_cache=False)
 
                     if not api_games:
                         logger.debug(f"No games from ESPN for {league_key}")
@@ -626,6 +628,8 @@ async def _sync_game_for_competition(
         existing_game.status = new_status
         existing_game.home_team_score = game_data.home_score
         existing_game.away_team_score = game_data.away_score
+        if game_data.raw_data:
+            existing_game.api_data = game_data.raw_data
         existing_game.updated_at = datetime.utcnow()
 
         # Determine winner when game becomes final
@@ -654,6 +658,7 @@ async def _sync_game_for_competition(
             home_team_score=game_data.home_score,
             away_team_score=game_data.away_score,
             venue_name=game_data.venue,
+            api_data=game_data.raw_data,
         )
         db.add(game)
         return (1, 0)
