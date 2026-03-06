@@ -132,7 +132,7 @@ United Degenerates League is a **social sports prediction game** where users com
    - Creates User record (status=ACTIVE)
    - Generates JWT access token (30min) + refresh token (7 days)
    ↓
-6. Frontend stores tokens in localStorage
+6. Backend sets tokens as httpOnly cookies; frontend updates auth state
    - useAuthStore updates: {user, isAuthenticated: true}
    ↓
 7. Redirects to Dashboard (/)

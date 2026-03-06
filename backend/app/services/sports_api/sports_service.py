@@ -105,7 +105,7 @@ class SportsDataService:
                 )
 
                 # Execute with circuit breaker protection
-                games = breaker.call(client.get_schedule, league, start_date, end_date)
+                games = await breaker.async_call(client.get_schedule, league, start_date, end_date)
 
                 if games:
                     logger.info(
@@ -148,12 +148,6 @@ class SportsDataService:
             f"Last error: {str(last_exception)}"
         )
 
-        # Try to return stale cache if available
-        stale_cache = self._get_from_cache(cache_key, include_expired=True)
-        if stale_cache:
-            logger.warning("SportsDataService: Returning stale cache data")
-            return self._deserialize_games(stale_cache)
-
         raise APIUnavailableError(
             f"Failed to fetch schedule for {league} from all API providers"
         )
@@ -190,7 +184,7 @@ class SportsDataService:
                     f"SportsDataService: Attempting {client.provider} for live scores ({league})"
                 )
 
-                games = breaker.call(client.get_live_scores, league)
+                games = await breaker.async_call(client.get_live_scores, league)
 
                 if games is not None:  # Allow empty list
                     logger.info(
@@ -231,12 +225,6 @@ class SportsDataService:
             f"Last error: {str(last_exception)}"
         )
 
-        # Try to return stale cache
-        stale_cache = self._get_from_cache(cache_key, include_expired=True)
-        if stale_cache:
-            logger.warning("SportsDataService: Returning stale cache data for live scores")
-            return self._deserialize_games(stale_cache)
-
         raise APIUnavailableError(
             f"Failed to fetch live scores for {league} from all API providers"
         )
@@ -269,7 +257,7 @@ class SportsDataService:
                     timeout_seconds=settings.CIRCUIT_BREAKER_TIMEOUT_SECONDS,
                 )
 
-                game = breaker.call(client.get_game_details, league, game_id)
+                game = await breaker.async_call(client.get_game_details, league, game_id)
 
                 if game:
                     logger.info(
@@ -302,7 +290,7 @@ class SportsDataService:
             "cache_status": "connected" if self.redis_client else "disconnected",
         }
 
-    def _get_from_cache(self, key: str, include_expired: bool = False) -> Optional[str]:
+    def _get_from_cache(self, key: str) -> Optional[str]:
         """Get value from Redis cache"""
         if not self.redis_client:
             return None
@@ -325,7 +313,12 @@ class SportsDataService:
             logger.error(f"Redis set error: {e}")
 
     def _serialize_games(self, games: List[GameData]) -> str:
-        """Serialize GameData objects to JSON for Redis cache."""
+        """Serialize GameData objects to JSON for Redis cache.
+
+        Only stores fields relevant to competition rules -- no raw API bloat.
+        raw_data is intentionally excluded: ESPN event payloads are 50-200KB
+        each and would inflate the cache by 10-100x with no benefit.
+        """
         data = []
         for game in games:
             game_dict = {
@@ -341,17 +334,25 @@ class SportsDataService:
                 "away_team_external_id": game.away_team_external_id,
                 "home_team_abbreviation": game.home_team_abbreviation,
                 "away_team_abbreviation": game.away_team_abbreviation,
-                "raw_data": game.raw_data,
             }
             data.append(game_dict)
         return json.dumps(data)
 
     def _deserialize_games(self, data: str) -> List[GameData]:
-        """Deserialize JSON to GameData objects"""
+        """Deserialize JSON to GameData objects.
+
+        Failures are isolated per-game so a single bad cache entry does not
+        silently drop the entire league's game list.
+        """
         try:
             games_data = json.loads(data)
-            games = []
-            for game_dict in games_data:
+        except Exception as e:
+            logger.error(f"Error parsing cached game JSON: {e}")
+            return []
+
+        games = []
+        for i, game_dict in enumerate(games_data):
+            try:
                 game = GameData(
                     external_id=game_dict["external_id"],
                     home_team=game_dict["home_team"],
@@ -367,13 +368,13 @@ class SportsDataService:
                     away_team_external_id=game_dict.get("away_team_external_id"),
                     home_team_abbreviation=game_dict.get("home_team_abbreviation"),
                     away_team_abbreviation=game_dict.get("away_team_abbreviation"),
-                    raw_data=game_dict.get("raw_data"),
                 )
                 games.append(game)
-            return games
-        except Exception as e:
-            logger.error(f"Error deserializing games: {e}")
-            return []
+            except Exception as e:
+                external_id = game_dict.get("external_id", f"index={i}")
+                logger.error(f"Error deserializing game {external_id}: {e}")
+                continue
+        return games
 
     async def close(self):
         """Close all API clients and connections"""

@@ -185,6 +185,56 @@ async def test_login_invalid_credentials(client: AsyncClient, test_user: User):
     assert response.status_code == 401
 
 
+@pytest.mark.asyncio
+async def test_pending_deletion_user_cannot_login(client: AsyncClient, db_session: AsyncSession):
+    """PENDING_DELETION users are blocked at login, not at the API dependency level.
+
+    Design: deps.get_current_user only hard-blocks DELETED accounts. PENDING_DELETION
+    users retain API access with their existing token during the 30-day grace period
+    so they can cancel. Login (auth.py) blocks PENDING_DELETION from issuing NEW tokens,
+    bounding the window to the token TTL (30 minutes).
+    """
+    pending = User(
+        email="pending@example.com",
+        username="pendinguser",
+        hashed_password=get_password_hash("Password123"),
+        role=UserRole.USER,
+        status=AccountStatus.PENDING_DELETION,
+    )
+    db_session.add(pending)
+    await db_session.commit()
+
+    # Login must be rejected — PENDING_DELETION cannot obtain new tokens
+    login_resp = await client.post(
+        "/api/auth/login",
+        json={"email": "pending@example.com", "password": "Password123"},
+    )
+    assert login_resp.status_code == 403
+    assert "not active" in login_resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_via_cookie(client: AsyncClient, test_user: User):
+    """Refresh token must work via httpOnly cookie (no Authorization header).
+
+    The client fixture sends cookies automatically because it uses
+    follow_redirects and the auth router sets the refresh_token cookie.
+    """
+    login_resp = await client.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "Password123"},
+    )
+    assert login_resp.status_code == 200
+    # refresh_token cookie is set by the backend
+    assert "refresh_token" in login_resp.cookies
+
+    # Call refresh without Authorization header — cookie is sent automatically
+    refresh_resp = await client.post("/api/auth/refresh")
+    assert refresh_resp.status_code == 200
+    data = refresh_resp.json()
+    assert "access_token" in data
+
+
 # ── Competition Tests ────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -327,13 +377,13 @@ async def test_pick_locking(db_session: AsyncSession, test_user: User, test_comp
     )
     db_session.add(participant)
 
-    # Create game that's about to start
+    # Create game whose start time is in the past so lock_expired_picks will lock it
     game = Game(
         competition_id=test_competition.id,
         external_id="test_game_locking",
         home_team_id=test_teams[0].id,
         away_team_id=test_teams[1].id,
-        scheduled_start_time=datetime.utcnow() + timedelta(seconds=5),  # 5 seconds from now
+        scheduled_start_time=datetime.utcnow() - timedelta(minutes=1),
         status=GameStatus.SCHEDULED,
         venue_name="Test Stadium",
         venue_city="Test City",
@@ -360,12 +410,9 @@ async def test_pick_locking(db_session: AsyncSession, test_user: User, test_comp
     from app.services.background_jobs import lock_expired_picks
     await lock_expired_picks()
 
-    # Refresh pick
+    # Refresh pick — it must be locked since the game start time has passed
     await db_session.refresh(pick)
-
-    # Should be locked now (if game started)
-    # Note: This might fail if test runs too fast - consider using freezegun for time control
-    # For now, this demonstrates the locking mechanism
+    assert pick.is_locked is True
 
 
 # ── Game Scoring Tests ───────────────────────────────────────────────
@@ -421,6 +468,13 @@ async def test_pick_scoring(db_session: AsyncSession, test_user: User, test_comp
     # Should be marked as correct with 1 point
     assert pick_correct.is_correct is True
     assert pick_correct.points_earned == 1
+
+    # Participant stats must also be updated
+    await db_session.refresh(participant)
+    assert participant.total_wins == 1
+    assert participant.total_losses == 0
+    assert participant.total_points == 1
+    assert participant.accuracy_percentage == 100.0
 
 
 # ── Leaderboard Tests ────────────────────────────────────────────────
@@ -614,6 +668,54 @@ async def test_create_competition_invalid_dates(client: AsyncClient, test_user: 
         }
     )
     assert response.status_code == 400
+
+
+# ── Account Deletion Tests ───────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_cleanup_pending_deletions(db_session: AsyncSession):
+    """cleanup_pending_deletions must anonymize users past the 30-day grace period
+    and leave users still within the grace period untouched.
+    """
+    now = datetime.utcnow()
+
+    # User past grace period — should be anonymized
+    old_user = User(
+        email="old@example.com",
+        username="olduser",
+        hashed_password=get_password_hash("Password123"),
+        role=UserRole.USER,
+        status=AccountStatus.PENDING_DELETION,
+        deletion_requested_at=now - timedelta(days=31),
+    )
+    # User still within grace period — must NOT be touched
+    recent_user = User(
+        email="recent@example.com",
+        username="recentuser",
+        hashed_password=get_password_hash("Password123"),
+        role=UserRole.USER,
+        status=AccountStatus.PENDING_DELETION,
+        deletion_requested_at=now - timedelta(days=5),
+    )
+    db_session.add_all([old_user, recent_user])
+    await db_session.commit()
+    await db_session.refresh(old_user)
+    await db_session.refresh(recent_user)
+
+    from app.services.background_jobs import cleanup_pending_deletions
+    await cleanup_pending_deletions()
+
+    await db_session.refresh(old_user)
+    await db_session.refresh(recent_user)
+
+    # Old user must be anonymized
+    assert old_user.status == AccountStatus.DELETED
+    assert old_user.hashed_password == ""
+    assert "deleted" in old_user.email
+
+    # Recent user must be untouched
+    assert recent_user.status == AccountStatus.PENDING_DELETION
+    assert recent_user.email == "recent@example.com"
 
 
 if __name__ == "__main__":

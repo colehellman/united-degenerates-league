@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { InternalAxiosRequestConfig } from 'axios'
 import toast from 'react-hot-toast'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -11,6 +12,16 @@ export const api = axios.create({
   // Send httpOnly cookies on every request
   withCredentials: true,
 })
+
+// Extend axios config to support per-request toast suppression.
+// Callers that handle their own error UI pass _skipToast: true to avoid
+// double-toasting (e.g. inline form validation messages).
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    _skipToast?: boolean
+    _retry?: boolean
+  }
+}
 
 // Track whether a refresh is already in-flight to avoid infinite loops
 let isRefreshing = false
@@ -29,10 +40,12 @@ function addRefreshSubscriber(cb: (token: string) => void) {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config
+    const originalRequest = error.config as InternalAxiosRequestConfig
 
-    // Show error message for non-auth errors
-    if (error.response?.status !== 401) {
+    // Show error message for non-auth errors, unless the caller opted out.
+    // Callers that render inline error messages pass _skipToast: true to avoid
+    // surfacing the same error twice.
+    if (error.response?.status !== 401 && !originalRequest._skipToast) {
       toast.error(error.response?.data?.detail || 'An unexpected error occurred')
     }
 
@@ -55,8 +68,8 @@ api.interceptors.response.use(
         onTokenRefreshed(res.data.access_token)
         return api(originalRequest)
       } catch (refreshError) {
-        // Refresh failed — force re-login
-        localStorage.removeItem('access_token')
+        // Refresh failed — redirect to login. Tokens are httpOnly cookies;
+        // there is no localStorage entry to remove.
         window.location.href = '/login'
         return Promise.reject(refreshError)
       } finally {

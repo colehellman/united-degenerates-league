@@ -194,8 +194,6 @@ async def update_game_scores():
                         game.status = GameStatus(score_data.status)
                         game.home_team_score = score_data.home_score
                         game.away_team_score = score_data.away_score
-                        if score_data.raw_data:
-                            game.api_data = score_data.raw_data
 
                         # Determine winner (NULL for ties, cancelled, or no result)
                         if game.status == GameStatus.FINAL:
@@ -217,9 +215,21 @@ async def update_game_scores():
                         game.updated_at = datetime.utcnow()
                         updated_games.append(game)
 
-                        # Score picks if game just became final
+                        # Score picks if game just became final.
+                        # On failure: revert game to IN_PROGRESS so the next job
+                        # run can retry scoring rather than leaving the game as FINAL
+                        # with no picks scored.
                         if was_not_final and game.status == GameStatus.FINAL:
-                            await _score_picks_for_game(db, game)
+                            try:
+                                await _score_picks_for_game(db, game)
+                            except Exception as score_err:
+                                logger.critical(
+                                    f"Pick scoring failed for game {game.id} after marking FINAL. "
+                                    f"Reverting to IN_PROGRESS to allow retry. Error: {score_err}",
+                                    exc_info=True,
+                                )
+                                game.status = GameStatus.IN_PROGRESS
+                                game.winner_team_id = None
 
                     logger.info(f"Updated {len(league_games)} games for {league_name}")
 
@@ -628,8 +638,6 @@ async def _sync_game_for_competition(
         existing_game.status = new_status
         existing_game.home_team_score = game_data.home_score
         existing_game.away_team_score = game_data.away_score
-        if game_data.raw_data:
-            existing_game.api_data = game_data.raw_data
         existing_game.updated_at = datetime.utcnow()
 
         # Determine winner when game becomes final
@@ -641,9 +649,20 @@ async def _sync_game_for_competition(
             else:
                 existing_game.winner_team_id = None  # Tie
 
-        # Score picks when game just completed
+        # Score picks when game just completed. If scoring fails, revert the
+        # game to IN_PROGRESS so the next poll cycle retries rather than
+        # leaving picks permanently unscored against a FINAL game.
         if was_not_final and new_status == GameStatus.FINAL:
-            await _score_picks_for_game(db, existing_game)
+            try:
+                await _score_picks_for_game(db, existing_game)
+            except Exception as score_err:
+                logger.critical(
+                    f"Pick scoring failed for game {existing_game.id} after marking FINAL. "
+                    f"Reverting to IN_PROGRESS to allow retry. Error: {score_err}",
+                    exc_info=True,
+                )
+                existing_game.status = GameStatus.IN_PROGRESS
+                existing_game.winner_team_id = None
 
         return (0, 1)
     else:
@@ -658,7 +677,6 @@ async def _sync_game_for_competition(
             home_team_score=game_data.home_score,
             away_team_score=game_data.away_score,
             venue_name=game_data.venue,
-            api_data=game_data.raw_data,
         )
         db.add(game)
         return (1, 0)

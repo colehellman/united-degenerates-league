@@ -37,17 +37,18 @@ This command will automatically:
 ### TDD Workflow Example (Backend)
 
 Let's say you need to add a new utility function to `app/core/utils.py` that formats a username.
+(`app/core/utils.py` does not exist yet — that's the point of the exercise.)
 
 1.  **RED**: First, create a test in `backend/tests/test_unit.py`:
 
     ```python
     # tests/test_unit.py
-    from app.core import utils
+    from app.core import utils  # ImportError until step 2
 
     def test_format_username():
         assert utils.format_username(" john_doe ") == "John_Doe"
     ```
-    Run `pytest`. It will fail because `format_username` doesn't exist.
+    Run `pytest`. It will fail with `ModuleNotFoundError` because `app/core/utils.py` doesn't exist yet.
 
 2.  **GREEN**: Now, create the function in `app/core/utils.py` with the simplest possible implementation to make the test pass:
 

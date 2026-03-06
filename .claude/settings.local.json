@@ -80,7 +80,15 @@
       "Bash(docker compose up -d postgres redis)",
       "Bash(gh run list --limit 1 --json databaseId,status,conclusion,displayTitle)",
       "Bash(echo \"$COMP_BODY\")",
-      "Bash(echo \"$COMP\")"
+      "Bash(echo \"$COMP\")",
+      "mcp__github__search_pull_requests",
+      "mcp__github__get_me",
+      "mcp__github__list_pull_requests",
+      "Skill(pr-review-toolkit:review-pr)",
+      "Skill(pr-review-toolkit:review-pr:*)",
+      "mcp__github__pull_request_read",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "mcp__plugin_serena_serena__get_symbols_overview"
     ],
     "deny": [],
     "ask": []
