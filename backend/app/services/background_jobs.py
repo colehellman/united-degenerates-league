@@ -528,8 +528,8 @@ async def sync_games_from_api():
                 league_comps = data["competitions"]
 
                 try:
-                    # Fetch today's scoreboard from ESPN (bypass cache to ensure raw data is present)
-                    api_games = await sports_service.get_live_scores(league_key, use_cache=False)
+                    # Fetch today's scoreboard from ESPN (cached for 60s)
+                    api_games = await sports_service.get_live_scores(league_key)
 
                     if not api_games:
                         logger.debug(f"No games from ESPN for {league_key}")

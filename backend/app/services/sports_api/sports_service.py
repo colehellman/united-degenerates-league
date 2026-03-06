@@ -325,12 +325,10 @@ class SportsDataService:
             logger.error(f"Redis set error: {e}")
 
     def _serialize_games(self, games: List[GameData]) -> str:
-        """Serialize GameData objects to JSON for Redis cache.
-        Only stores fields relevant to competition rules — no raw API bloat.
-        """
+        """Serialize GameData objects to JSON for Redis cache."""
         data = []
         for game in games:
-            data.append({
+            game_dict = {
                 "external_id": game.external_id,
                 "home_team": game.home_team,
                 "away_team": game.away_team,
@@ -343,7 +341,9 @@ class SportsDataService:
                 "away_team_external_id": game.away_team_external_id,
                 "home_team_abbreviation": game.home_team_abbreviation,
                 "away_team_abbreviation": game.away_team_abbreviation,
-            })
+                "raw_data": game.raw_data,
+            }
+            data.append(game_dict)
         return json.dumps(data)
 
     def _deserialize_games(self, data: str) -> List[GameData]:
@@ -367,6 +367,7 @@ class SportsDataService:
                     away_team_external_id=game_dict.get("away_team_external_id"),
                     home_team_abbreviation=game_dict.get("home_team_abbreviation"),
                     away_team_abbreviation=game_dict.get("away_team_abbreviation"),
+                    raw_data=game_dict.get("raw_data"),
                 )
                 games.append(game)
             return games
