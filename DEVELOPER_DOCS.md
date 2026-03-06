@@ -13,25 +13,11 @@ The UDL application is a modern web application with a decoupled frontend and ba
 *   **Services**:
     *   **PostgreSQL**: The primary database for the application.
     *   **Redis**: Used for caching and background jobs.
-*   **Deployment**: The application is designed to be deployed using Docker and can be hosted on platforms like Render or Railway.
+*   **Deployment**: The application is designed to be deployed using Docker and can be hosted on platforms like Render.
 
 ## Getting Started (Local Development)
 
-The entire application stack (frontend, backend, database, redis) can be run easily using Docker Compose.
-
-1.  **Prerequisites**:
-    *   Docker and Docker Compose installed.
-    *   A `.env` file created in the `backend` directory with a `SECRET_KEY`. You can copy the `.env.example`.
-
-2.  **Start the application:**
-    From the root of the project, run:
-    ```bash
-    docker-compose up -d --build
-    ```
-
-3.  **Access the application:**
-    *   **Frontend**: `http://localhost:3000`
-    *   **Backend API**: `http://localhost:8000/docs`
+For a complete guide on setting up the project for local development, please refer to the main [README.md](README.md) file. It provides a step-by-step guide on how to get the entire application stack running with Docker Compose.
 
 ## Frontend
 
@@ -47,6 +33,7 @@ The frontend is a single-page application built with React.
 *   **TanStack Query**: For data fetching and caching.
 *   **Axios**: For making HTTP requests to the backend API.
 *   **Tailwind CSS**: For styling.
+*   **Vitest**: For unit and integration testing.
 
 ### Project Structure
 
@@ -127,24 +114,9 @@ backend/
 └── Dockerfile         # Dockerfile for building the backend image
 ```
 
-### Getting Started
+## Database
 
-The easiest way to get the backend running is to use the provided Docker Compose setup.
-
-1.  **From the root of the project, start the services:**
-    ```bash
-    docker-compose up -d --build
-    ```
-    This will start the backend server, a PostgreSQL database, and a Redis instance. The API will be available at `http://localhost:8000`.
-
-2.  **To run the backend locally without Docker:**
-    *   Create a Python virtual environment.
-    *   Install the dependencies: `pip install -r backend/requirements.txt`
-    *   Set up the required environment variables (see `.env.example`).
-    *   Run the database migrations (see below).
-    *   Start the server: `uvicorn app.main:app --reload`
-
-### Database Migrations
+### Migrations
 
 Database migrations are managed with Alembic.
 
@@ -152,9 +124,18 @@ Database migrations are managed with Alembic.
     ```bash
     docker-compose exec backend alembic upgrade head
     ```
-*   **To create a new migration:**
+*   **To create a new migration after changing a model:**
     ```bash
     docker-compose exec backend alembic revision --autogenerate -m "Your migration message"
+    ```
+
+### Seeding
+
+The project includes a script to seed the database with sample data.
+
+*   **To run the seed script:**
+    ```bash
+    docker-compose exec backend python -m scripts.seed_data
     ```
 
 ## Services
@@ -211,13 +192,24 @@ The backend has a suite of tests using `pytest`.
     docker-compose exec backend pytest
     ```
 
+### Frontend
+
+The frontend uses Vitest for unit and component testing.
+
+*   **To run the tests:**
+    ```bash
+    cd frontend
+    npm test
+    ```
+
 ## Deployment
 
-The application is designed for containerized deployments. The `render.yaml` file provides a blueprint for deploying to Render. It defines the services for the backend and frontend.
+The application is designed for containerized deployments. The `render.yaml` file provides a blueprint for deploying to Render. For other platforms, you can use a standard Docker deployment.
 
-The general deployment process is:
-1.  Build the Docker image for the backend.
-2.  Push the image to a container registry.
-3.  Deploy the image to a hosting provider.
-4.  Build the frontend static assets.
-5.  Deploy the static assets to a static site host or CDN.
+1.  **Build the Docker images:**
+    ```bash
+    docker-compose build
+    ```
+2.  **Push the images to a container registry** (e.g., Docker Hub, Google Container Registry).
+3.  **Deploy the images** to your hosting provider, ensuring all environment variables from `backend/.env.example` are set.
+4.  **Run database migrations** in your production environment.

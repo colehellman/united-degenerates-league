@@ -31,6 +31,7 @@ A comprehensive sports prediction and competition platform for friends to compet
 - TanStack Query (data fetching)
 - React Router (navigation)
 - Zustand (state management)
+- Vitest (testing)
 
 **Infrastructure:**
 - Docker Compose (local development and production)
@@ -61,10 +62,10 @@ A comprehensive sports prediction and competition platform for friends to compet
    Edit `backend/.env` and set your secrets:
    ```env
    SECRET_KEY=your-super-secret-key-here-change-this
-   # Add your sports API keys here
-   ESPN_API_KEY=your-espn-api-key
-   SPORTSDATA_API_KEY=your-sportsdata-key
-   # ... etc
+   # Add your sports API keys here if you have them
+   THE_ODDS_API_KEY=
+   ESPN_API_KEY=
+   RAPIDAPI_KEY=
    ```
 
 3. **Start all services:**
@@ -84,7 +85,13 @@ A comprehensive sports prediction and competition platform for friends to compet
    docker-compose exec backend alembic upgrade head
    ```
 
-5. **Access the application:**
+5. **Seed the database with sample data:**
+    ```bash
+    # In the same terminal
+    docker-compose exec backend python -m scripts.seed_data
+    ```
+
+6. **Access the application:**
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:8000
    - API Documentation: http://localhost:8000/docs
@@ -140,6 +147,9 @@ udl/
 │   │   ├── schemas/             # Pydantic schemas
 │   │   ├── services/            # Business logic and background jobs
 │   │   └── main.py              # FastAPI application entry point
+│   ├── scripts/
+│   │   └── seed_data.py
+│   ├── tests/                   # Backend tests
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── alembic.ini
@@ -152,13 +162,17 @@ udl/
 │   │   ├── types/               # TypeScript type definitions
 │   │   ├── utils/               # Utility functions
 │   │   ├── styles/              # CSS and Tailwind styles
+│   │   ├── tests/               # Frontend tests
 │   │   ├── App.tsx              # Main app component
 │   │   └── main.tsx             # Entry point
 │   ├── Dockerfile
 │   ├── package.json
 │   ├── vite.config.ts
+│   ├── vitest.config.ts
 │   ├── tailwind.config.js
 │   └── tsconfig.json
+├── docs/                        # Project documentation
+├── mcp_server/                  # MCP server for Playwright integration
 ├── docker-compose.yml
 └── README.md
 ```
@@ -170,7 +184,6 @@ Key models:
 - **Competition**: Represents a competition (Daily Picks or Fixed Teams)
 - **League**: Sports leagues (NFL, NBA, etc.)
 - **Team**: Teams within leagues
-- **Golfer**: PGA golfers
 - **Game**: Individual games/matches
 - **Pick**: Daily picks for games
 - **FixedTeamSelection**: Pre-season team/golfer selections
@@ -315,8 +328,7 @@ DATABASE_URL=postgresql://user:password@host:5432/dbname
 REDIS_URL=redis://host:6379/0
 
 # Sports APIs
-ESPN_API_KEY=<your-key>
-SPORTSDATA_API_KEY=<your-key>
+THE_ODDS_API_KEY=<your-key>
 # ... etc
 
 # CORS
@@ -327,13 +339,13 @@ CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 
 ```bash
 # Build production images
-docker-compose -f docker-compose.prod.yml build
+docker-compose build
 
 # Start services
-docker-compose -f docker-compose.prod.yml up -d
+docker-compose up -d
 
 # Run migrations
-docker-compose -f docker-compose.prod.yml exec backend alembic upgrade head
+docker-compose exec backend alembic upgrade head
 ```
 
 ### Health Checks
@@ -446,49 +458,3 @@ GET /api/health/api-status
 ```
 
 See detailed setup guide: **[SPORTS_API_SETUP.md](SPORTS_API_SETUP.md)**
-
-
-## ☁️ Railway Deployment
-
-Deploy to Railway.app in minutes!
-
-### Quick Deploy (5 minutes)
-
-1. **Create Railway Project:** https://railway.app/new
-2. **Set Root Directory:** `backend` in Settings → Source
-3. **Add Database:** PostgreSQL + Redis
-4. **Add Environment Variables:**
-   ```env
-   SECRET_KEY=<generate-strong-key>
-   ENVIRONMENT=production
-   THE_ODDS_API_KEY=your-api-key
-   ```
-5. **Deploy!** Railway auto-detects and deploys
-
-**See:** [RAILWAY_QUICKSTART.md](RAILWAY_QUICKSTART.md) for complete guide
-
-### Files Created for Railway
-
-- ✅ `backend/start.sh` - Startup script (runs migrations + server)
-- ✅ `backend/Procfile` - Process definition
-- ✅ `backend/nixpacks.toml` - Build configuration
-- ✅ `backend/railway.toml` - Railway configuration
-- ✅ `railway.json` - Root project configuration
-
-### Railway Architecture
-
-```
-Railway Project
-├── Backend (FastAPI) → backend/ directory
-├── PostgreSQL → Auto-connected via DATABASE_URL
-└── Redis → Auto-connected via REDIS_URL
-```
-
-### Cost Estimate
-
-~$6-14/month for full production deployment:
-- PostgreSQL: $2-5/month
-- Redis: $1-2/month  
-- Backend: $2-5/month
-- Frontend (optional): $1-2/month or use Vercel (free)
-
