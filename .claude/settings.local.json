@@ -89,7 +89,14 @@
       "mcp__github__pull_request_read",
       "Bash(python -m pytest tests/ -v --tb=short)",
       "mcp__plugin_serena_serena__get_symbols_overview",
-      "Bash(python -m pytest tests/ --co -q)"
+      "Bash(python -m pytest tests/ --co -q)",
+      "Bash(gh pr list --head feature/quick-wins)",
+      "Bash(git remote get-url origin)",
+      "Bash(curl -s \"https://api.github.com/repos/colehellman/united-degenerates-league/pulls?state=open&head=colehellman:feature/quick-wins\")",
+      "Bash(curl -s \"https://api.github.com/repos/colehellman/united-degenerates-league/actions/runs/22806233940/jobs\")",
+      "Bash(source ~/.zshrc)",
+      "Bash(source ~/.bash_profile)",
+      "Bash(export PATH=$PATH:/usr/local/bin:/opt/homebrew/bin)"
     ],
     "deny": [],
     "ask": []
