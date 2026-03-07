@@ -34,6 +34,34 @@ class CircuitBreaker:
         self.last_failure_time: Optional[datetime] = None
         self.last_success_time: Optional[datetime] = None
 
+    async def async_call(self, func, *args, **kwargs):
+        """Execute async coroutine with circuit breaker protection.
+
+        Use this instead of call() for async client methods — call() does not
+        await the coroutine, so async failures are invisible to the breaker.
+        """
+        if self.state == CircuitState.OPEN:
+            if self._should_attempt_reset():
+                logger.info(f"Circuit breaker '{self.name}': Attempting reset (half-open)")
+                self.state = CircuitState.HALF_OPEN
+            else:
+                time_remaining = self._time_until_reset()
+                logger.warning(
+                    f"Circuit breaker '{self.name}': OPEN - rejecting request. "
+                    f"Retry in {time_remaining}s"
+                )
+                raise CircuitBreakerOpenError(
+                    f"Circuit breaker '{self.name}' is OPEN. Retry in {time_remaining}s"
+                )
+
+        try:
+            result = await func(*args, **kwargs)
+            self._on_success()
+            return result
+        except Exception as e:
+            self._on_failure()
+            raise e
+
     def call(self, func, *args, **kwargs):
         """Execute function with circuit breaker protection"""
         if self.state == CircuitState.OPEN:

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.db.session import AsyncSessionLocal
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, AccountStatus
 from app.core.security import verify_token
 
 # auto_error=False so unauthenticated requests don't 403 before we check cookies
@@ -64,8 +64,11 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
 
-    # Check if user account is active
-    if user.status != "active":
+    # Block hard-deleted accounts only. PENDING_DELETION users retain access
+    # with their existing token so they can cancel within the 30-day grace
+    # period. Login (auth.py) separately blocks PENDING_DELETION from obtaining
+    # new tokens, so the window is bounded by token TTL (30 minutes).
+    if user.status == AccountStatus.DELETED:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is not active",

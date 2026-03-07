@@ -1,8 +1,8 @@
 # 🏗️ United Degenerates League - Architecture Documentation
 
 **Version:** 2.0.0
-**Last Updated:** 2025-01-11
-**Status:** Development (60-70% Complete - Updated from initial 40-50% estimate)
+**Last Updated:** 2026-03-06
+**Status:** Development (80-90% Complete)
 
 ---
 
@@ -12,7 +12,7 @@
 
 **Architecture Pattern:** Clean Architecture / Layered Monolith
 **Paradigm:** Async-first backend with reactive frontend
-**Deployment:** Docker + Railway.app
+**Deployment:** Docker + Render
 
 ### Key Metrics (Updated)
 - **Backend:** 34 Python files (~3,000 LOC)
@@ -51,20 +51,20 @@
 ```
 udl/
 ├── backend/                    # Python FastAPI application
-│   ├── alembic/               # Database migrations (empty - needs generation)
-│   │   ├── versions/          # Migration scripts (TODO)
+│   ├── alembic/               # Database migrations
+│   │   ├── versions/          # Migration scripts
 │   │   └── env.py             # Alembic configuration
 │   ├── app/                   # Main application code
-│   │   ├── api/              # HTTP endpoint handlers (7 modules)
+│   │   ├── api/              # HTTP endpoint handlers
 │   │   ├── core/             # Configuration, security, dependencies
 │   │   ├── db/               # Database session management
-│   │   ├── models/           # SQLAlchemy ORM models (8 entities)
-│   │   ├── schemas/          # Pydantic validation schemas (5 modules)
+│   │   ├── models/           # SQLAlchemy ORM models
+│   │   ├── schemas/          # Pydantic validation schemas
 │   │   ├── services/         # Business logic and integrations
-│   │   │   ├── sports_api/  # Multi-provider API abstraction
-│   │   │   ├── circuit_breaker.py
-│   │   │   └── background_jobs.py
 │   │   └── main.py           # FastAPI app factory
+│   ├── scripts/
+│   │   └── seed_data.py
+│   ├── tests/                 # Backend tests
 │   ├── .env                   # Environment variables (gitignored)
 │   ├── requirements.txt       # Python dependencies
 │   ├── Dockerfile            # Container definition
@@ -72,22 +72,24 @@ udl/
 │
 ├── frontend/                  # React TypeScript application
 │   ├── src/
-│   │   ├── pages/            # Route components (5 pages)
-│   │   ├── components/       # Reusable UI components (1 layout)
-│   │   ├── services/         # API client + state management
-│   │   ├── App.tsx           # Router configuration
+│   ├── pages/            # Route components
+│   ├── components/       # Reusable UI components
+│   ├── services/         # API client + state management
+│   ├── tests/            # Frontend tests
+│   ├── App.tsx           # Router configuration
 │   │   └── main.tsx          # React entry point
 │   ├── public/               # Static assets
 │   ├── package.json          # Node dependencies
 │   ├── vite.config.ts        # Build configuration
+│   ├── vitest.config.ts      # Test configuration
 │   ├── tailwind.config.js    # Styling configuration
 │   └── tsconfig.json         # TypeScript configuration
 │
+├── docs/                      # Project documentation
+├── mcp_server/                # MCP server for Playwright integration
 ├── docker-compose.yml         # Multi-container orchestration
-├── Dockerfile                # Root Dockerfile for Railway
-├── railway.toml              # Railway deployment config
+├── render.yaml              # Render deployment config
 ├── ARCHITECTURE.md           # This file
-├── CODE_MAP.md              # Complete file catalog
 └── README.md                # Getting started guide
 ```
 
@@ -130,7 +132,7 @@ United Degenerates League is a **social sports prediction game** where users com
    - Creates User record (status=ACTIVE)
    - Generates JWT access token (30min) + refresh token (7 days)
    ↓
-6. Frontend stores tokens in localStorage
+6. Backend sets tokens as httpOnly cookies; frontend updates auth state
    - useAuthStore updates: {user, isAuthenticated: true}
    ↓
 7. Redirects to Dashboard (/)
@@ -598,7 +600,7 @@ asyncpg driver (pure Python, fastest async driver)
     ↓
 SQLAlchemy 2.0 ORM (async API)
     ↓
-Alembic (migrations, not yet generated)
+Alembic (migrations)
 ```
 
 ##### `db/session.py` - Connection Pool Manager
@@ -1581,16 +1583,11 @@ circuit_breaker_manager = CircuitBreakerManager()
 ```python
 """
 Background jobs using APScheduler.
-
-⚠️ Current issue: Uses BackgroundScheduler (synchronous)
-TODO: Should use AsyncIOScheduler (asynchronous)
-
-Jobs are defined but NOT IMPLEMENTED (stubs with TODO comments).
 """
 
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-scheduler = BackgroundScheduler()
+scheduler = AsyncIOScheduler()
 
 async def update_game_scores():
     """
@@ -1653,8 +1650,6 @@ async def update_game_scores():
     8. Invalidate caches:
        for competition_id in affected_competitions:
            redis.delete(f"leaderboard:{competition_id}")
-
-    Status: 🔴 TODO - Not implemented yet
     """
     pass
 
@@ -1696,8 +1691,6 @@ async def update_competition_statuses():
         WHERE competition_id = competitions.id
         AND status NOT IN ('final', 'cancelled', 'no_result')
     )
-
-    Status: 🔴 TODO - Not implemented yet
     """
     pass
 
@@ -1718,8 +1711,6 @@ async def lock_expired_picks():
     )
 
     This prevents users from editing picks after game starts.
-
-    Status: 🔴 TODO - Not implemented yet
     """
     pass
 
@@ -1750,8 +1741,6 @@ async def cleanup_pending_deletions():
           - Don't delete Pick records
           - Don't delete AuditLog entries
           - User shows as "Deleted User" in UI
-
-    Status: 🔴 TODO - Not implemented yet
     """
     pass
 
