@@ -13,6 +13,12 @@ interface League {
 export default function CreateCompetition() {
   const navigate = useNavigate()
 
+  // Format current local time as YYYY-MM-DDTHH:MM for the datetime-local min attribute.
+  // datetime-local inputs operate in browser-local time, so we must use local (not UTC) values here.
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const _now = new Date()
+  const startDateMin = `${_now.getFullYear()}-${pad(_now.getMonth() + 1)}-${pad(_now.getDate())}T${pad(_now.getHours())}:${pad(_now.getMinutes())}`
+
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [mode, setMode] = useState('daily_picks')
@@ -49,6 +55,11 @@ export default function CreateCompetition() {
 
     if (!startDate || !endDate) {
       setError('Start and end dates are required')
+      return
+    }
+
+    if (new Date(startDate) < new Date()) {
+      setError('Start date cannot be in the past')
       return
     }
 
@@ -192,6 +203,7 @@ export default function CreateCompetition() {
                 id="startDate"
                 type="datetime-local"
                 required
+                min={startDateMin}
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="input mt-1"

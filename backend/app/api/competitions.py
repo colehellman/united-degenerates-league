@@ -7,6 +7,7 @@ from datetime import datetime
 from app.core.deps import get_db, get_current_user, get_current_global_admin
 from app.models.user import User
 from app.models.competition import Competition, CompetitionStatus, Visibility
+from app.models.user import UserRole
 from app.models.participant import Participant, JoinRequest, JoinRequestStatus
 from app.models.game import Game
 from app.models.league import Team, Golfer
@@ -429,6 +430,50 @@ async def get_competition_games(
         })
 
     return games_response
+
+
+@router.post("/{competition_id}/sync-games")
+async def sync_competition_games(
+    competition_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Force an immediate ESPN game sync for a specific competition.
+
+    Accessible to competition admins and global admins. Runs synchronously
+    so the caller sees errors and game counts immediately rather than relying
+    on the silent 5-minute background job.
+    """
+    result = await db.execute(
+        select(Competition).where(Competition.id == competition_id)
+    )
+    competition = result.scalar_one_or_none()
+
+    if not competition:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found")
+
+    is_admin = (
+        str(current_user.id) in competition.league_admin_ids
+        or current_user.role == UserRole.GLOBAL_ADMIN
+    )
+
+    if not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Competition admin access required",
+        )
+
+    from app.services.background_jobs import sync_games_for_competition
+
+    try:
+        sync_result = await sync_games_for_competition(competition_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"ESPN sync failed: {str(exc)}",
+        )
+
+    return sync_result
 
 
 @router.get("/{competition_id}/available-selections")

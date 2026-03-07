@@ -166,21 +166,24 @@ export default function CompetitionDetail() {
     },
   })
 
-  // Admin: force a game sync for this competition
+  // Admin: force a game sync for this competition (runs synchronously, returns counts)
   const forceSyncMutation = useMutation({
     mutationFn: async () => {
-      // Hit the admin sync endpoint if it exists, otherwise fall back to
-      // invalidating the games cache so the next refetch re-queries the DB.
-      await api.post(`/admin/sync-games`)
+      const response = await api.post(`/competitions/${id}/sync-games`)
+      return response.data as { created: number; updated: number; message?: string }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['competition-games', id] })
-      toast.success('Game sync triggered — games will refresh shortly')
+      if (data.created > 0) {
+        toast.success(`Synced ${data.created} new game${data.created !== 1 ? 's' : ''} from ESPN`)
+      } else if (data.updated > 0) {
+        toast.success(`Updated ${data.updated} game${data.updated !== 1 ? 's' : ''}`)
+      } else {
+        toast(data.message || 'No new games found from ESPN today', { icon: 'ℹ️' })
+      }
     },
-    onError: () => {
-      // Endpoint may not exist; just invalidate the cache so it refetches
-      queryClient.invalidateQueries({ queryKey: ['competition-games', id] })
-      toast.success('Games cache refreshed')
+    onError: (err: any) => {
+      toast.error(err.response?.data?.detail || 'Game sync failed')
     },
   })
 

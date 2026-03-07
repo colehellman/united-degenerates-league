@@ -113,7 +113,9 @@
       "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" node --version)",
       "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" npm run lint)",
       "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" node /opt/homebrew/lib/node_modules/npm/bin/npm-cli.js run lint)",
-      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" node /Users/colehellman/workspace/udl/frontend/node_modules/.bin/eslint /Users/colehellman/workspace/udl/frontend/src/pages/CompetitionDetail.tsx /Users/colehellman/workspace/udl/frontend/src/pages/Admin.tsx --max-warnings 0)"
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" node /Users/colehellman/workspace/udl/frontend/node_modules/.bin/eslint /Users/colehellman/workspace/udl/frontend/src/pages/CompetitionDetail.tsx /Users/colehellman/workspace/udl/frontend/src/pages/Admin.tsx --max-warnings 0)",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard\")",
+      "Bash(python -m pytest tests/ -v --tb=short -q)"
     ],
     "deny": [],
     "ask": []
