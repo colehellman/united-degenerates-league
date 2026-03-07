@@ -20,11 +20,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     bugreportstatus_enum = sa.Enum(
-        'open', 'in_review', 'resolved', 'closed',
+        'OPEN', 'IN_REVIEW', 'RESOLVED', 'CLOSED',
         name='bugreportstatus',
     )
     bugreportcategory_enum = sa.Enum(
-        'ui', 'performance', 'data', 'auth', 'other',
+        'UI', 'PERFORMANCE', 'DATA', 'AUTH', 'OTHER',
         name='bugreportcategory',
     )
 
@@ -34,8 +34,8 @@ def upgrade() -> None:
         sa.Column('user_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('users.id'), nullable=False),
         sa.Column('title', sa.String(200), nullable=False),
         sa.Column('description', sa.String(2000), nullable=False),
-        sa.Column('status', bugreportstatus_enum, nullable=False, server_default='open'),
-        sa.Column('category', bugreportcategory_enum, nullable=False, server_default='other'),
+        sa.Column('status', bugreportstatus_enum, nullable=False, server_default='OPEN'),
+        sa.Column('category', bugreportcategory_enum, nullable=False, server_default='OTHER'),
         sa.Column('page_url', sa.String(500), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('updated_at', sa.DateTime(), nullable=False),
