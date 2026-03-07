@@ -23,6 +23,11 @@ export default function Layout() {
               <Link to="/competitions" className="hover:text-primary-200">
                 Competitions
               </Link>
+              {user?.role === 'global_admin' && (
+                <Link to="/admin" className="hover:text-yellow-200 text-yellow-200 font-medium">
+                  Admin ★
+                </Link>
+              )}
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm">

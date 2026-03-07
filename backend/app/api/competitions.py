@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from typing import List, Optional
@@ -25,6 +25,7 @@ router = APIRouter()
 @router.post("", response_model=CompetitionResponse, status_code=status.HTTP_201_CREATED)
 async def create_competition(
     competition_data: CompetitionCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -60,6 +61,11 @@ async def create_competition(
     response.participant_count = 1
     response.user_is_participant = True
     response.user_is_admin = True
+
+    # Kick off a game sync immediately so the creator sees today's games
+    # without waiting for the 5-minute scheduled job.
+    from app.services.background_jobs import sync_games_from_api
+    background_tasks.add_task(sync_games_from_api)
 
     return response
 
