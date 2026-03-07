@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import List, Optional
@@ -183,6 +183,17 @@ async def reject_join_request(
     await db.commit()
 
     return {"message": "Join request rejected"}
+
+
+@router.post("/sync-games")
+async def force_sync_games(
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_global_admin),
+):
+    """Trigger an immediate game sync from ESPN (global admins only)."""
+    from app.services.background_jobs import sync_games_from_api
+    background_tasks.add_task(sync_games_from_api)
+    return {"message": "Game sync triggered"}
 
 
 @router.get("/audit-logs")

@@ -103,7 +103,17 @@
       "Bash(export PATH=\"/usr/bin:/bin\")",
       "Bash(export PATH=\"/opt/homebrew/bin:/usr/bin:/bin\")",
       "Bash(echo \"EXIT:$?\")",
-      "Bash(echo \"LINT_EXIT:$?\")"
+      "Bash(echo \"LINT_EXIT:$?\")",
+      "Bash(python -m pytest tests/test_bug_reports_api.py tests/test_competitions_api.py -v --tb=short)",
+      "Bash(pytest tests/test_bug_reports_api.py tests/test_competitions_api.py -v --tb=short)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(pip show pytest)",
+      "Bash(node --version)",
+      "Bash(/opt/homebrew/bin/node --version)",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" node --version)",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" npm run lint)",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" node /opt/homebrew/lib/node_modules/npm/bin/npm-cli.js run lint)",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" node /Users/colehellman/workspace/udl/frontend/node_modules/.bin/eslint /Users/colehellman/workspace/udl/frontend/src/pages/CompetitionDetail.tsx /Users/colehellman/workspace/udl/frontend/src/pages/Admin.tsx --max-warnings 0)"
     ],
     "deny": [],
     "ask": []
