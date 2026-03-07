@@ -59,6 +59,28 @@ async def create_daily_picks_batch(
             detail="You are not a participant in this competition",
         )
 
+    if competition.max_picks_per_day is not None:
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = datetime.utcnow().replace(hour=23, minute=59, second=59, microsecond=999999)
+        user_picks_today_count_result = await db.execute(
+            select(func.count(Pick.id)).where(
+                and_(
+                    Pick.user_id == current_user.id,
+                    Pick.competition_id == competition.id,
+                    Pick.created_at >= today_start,
+                    Pick.created_at <= today_end,
+                )
+            )
+        )
+        current_picks_count = user_picks_today_count_result.scalar_one()
+
+        if (current_picks_count + len(pick_data.picks)) > competition.max_picks_per_day:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Daily pick limit ({competition.max_picks_per_day}) exceeded.",
+            )
+
+
     created_picks = []
     now = datetime.utcnow()
 

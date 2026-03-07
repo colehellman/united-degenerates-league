@@ -33,7 +33,7 @@ async def get_join_requests(
 
     # Check if user is admin
     is_admin = (
-        str(current_user.id) in competition.league_admin_ids
+        current_user.id in competition.league_admin_ids
         or current_user.role == "global_admin"
     )
 
@@ -71,6 +71,12 @@ async def approve_join_request(
     if not join_request:
         raise HTTPException(status_code=404, detail="Join request not found")
 
+    if join_request.status != JoinRequestStatus.PENDING:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Join request is not pending (status: {join_request.status})",
+        )
+
     # Get competition
     comp_result = await db.execute(
         select(Competition).where(Competition.id == join_request.competition_id)
@@ -79,7 +85,7 @@ async def approve_join_request(
 
     # Check if user is admin
     is_admin = (
-        str(current_user.id) in competition.league_admin_ids
+        current_user.id in competition.league_admin_ids
         or current_user.role == "global_admin"
     )
 
@@ -144,7 +150,7 @@ async def reject_join_request(
 
     # Check if user is admin
     is_admin = (
-        str(current_user.id) in competition.league_admin_ids
+        current_user.id in competition.league_admin_ids
         or current_user.role == "global_admin"
     )
 
@@ -196,7 +202,7 @@ async def get_audit_logs(
     if current_user.role != "global_admin":
         # Get competitions where user is admin
         comp_query = select(Competition.id).where(
-            Competition.league_admin_ids.contains([str(current_user.id)])
+            Competition.league_admin_ids.contains([current_user.id])
         )
         comp_result = await db.execute(comp_query)
         admin_competition_ids = [str(row[0]) for row in comp_result.all()]

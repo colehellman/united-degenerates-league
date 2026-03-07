@@ -30,165 +30,7 @@ from app.models.pick import Pick, FixedTeamSelection
 from app.models.audit_log import AuditLog, AuditAction
 from app.core.security import get_password_hash
 
-
-# ── Helpers ──────────────────────────────────────────────────────────
-
-async def _login(client: AsyncClient, email: str = "test@example.com", password: str = "Password123") -> str:
-    """Login and return the access token."""
-    resp = await client.post("/api/auth/login", json={"email": email, "password": password})
-    return resp.json()["access_token"]
-
-
-async def _login_full(client: AsyncClient, email: str = "test@example.com", password: str = "Password123") -> dict:
-    """Login and return the full token response."""
-    resp = await client.post("/api/auth/login", json={"email": email, "password": password})
-    return resp.json()
-
-
-async def _make_global_admin(db_session: AsyncSession, user: User) -> User:
-    """Promote user to global admin."""
-    user.role = UserRole.GLOBAL_ADMIN
-    await db_session.commit()
-    await db_session.refresh(user)
-    return user
-
-
-# ── Fixtures ─────────────────────────────────────────────────────────
-
-@pytest.fixture
-async def test_user(db_session: AsyncSession):
-    user = User(
-        email="test@example.com",
-        username="testuser",
-        hashed_password=get_password_hash("Password123"),
-        role=UserRole.USER,
-        status=AccountStatus.ACTIVE,
-    )
-    db_session.add(user)
-    await db_session.commit()
-    await db_session.refresh(user)
-    return user
-
-
-@pytest.fixture
-async def second_user(db_session: AsyncSession):
-    user = User(
-        email="second@example.com",
-        username="seconduser",
-        hashed_password=get_password_hash("Password123"),
-        role=UserRole.USER,
-        status=AccountStatus.ACTIVE,
-    )
-    db_session.add(user)
-    await db_session.commit()
-    await db_session.refresh(user)
-    return user
-
-
-@pytest.fixture
-async def test_league(db_session: AsyncSession):
-    league = League(
-        name=LeagueName.NFL,
-        display_name="National Football League",
-        is_team_based=True,
-    )
-    db_session.add(league)
-    await db_session.commit()
-    await db_session.refresh(league)
-    return league
-
-
-@pytest.fixture
-async def test_teams(db_session: AsyncSession, test_league: League):
-    teams = [
-        Team(league_id=test_league.id, name="Team A", city="City A",
-             abbreviation="TA", external_id="team_a"),
-        Team(league_id=test_league.id, name="Team B", city="City B",
-             abbreviation="TB", external_id="team_b"),
-    ]
-    db_session.add_all(teams)
-    await db_session.commit()
-    for t in teams:
-        await db_session.refresh(t)
-    return teams
-
-
-@pytest.fixture
-async def active_competition(db_session: AsyncSession, test_league: League, test_user: User):
-    """Active competition where test_user is creator + admin."""
-    comp = Competition(
-        name="Active Comp",
-        mode=CompetitionMode.DAILY_PICKS,
-        status=CompetitionStatus.ACTIVE,
-        league_id=test_league.id,
-        start_date=datetime.utcnow() - timedelta(days=1),
-        end_date=datetime.utcnow() + timedelta(days=7),
-        display_timezone="UTC",
-        visibility=Visibility.PUBLIC,
-        join_type=JoinType.OPEN,
-        max_picks_per_day=10,
-        creator_id=test_user.id,
-        league_admin_ids=[test_user.id],
-    )
-    db_session.add(comp)
-    await db_session.commit()
-    await db_session.refresh(comp)
-    return comp
-
-
-@pytest.fixture
-async def approval_competition(db_session: AsyncSession, test_league: League, test_user: User):
-    """Competition that requires approval to join."""
-    comp = Competition(
-        name="Approval Comp",
-        mode=CompetitionMode.DAILY_PICKS,
-        status=CompetitionStatus.ACTIVE,
-        league_id=test_league.id,
-        start_date=datetime.utcnow() - timedelta(days=1),
-        end_date=datetime.utcnow() + timedelta(days=7),
-        display_timezone="UTC",
-        visibility=Visibility.PUBLIC,
-        join_type=JoinType.REQUIRES_APPROVAL,
-        creator_id=test_user.id,
-        league_admin_ids=[test_user.id],
-    )
-    db_session.add(comp)
-    await db_session.commit()
-    await db_session.refresh(comp)
-    return comp
-
-
-@pytest.fixture
-async def upcoming_fixed_comp(db_session: AsyncSession, test_league: League, test_user: User):
-    """Upcoming fixed-teams competition (selection phase open)."""
-    comp = Competition(
-        name="Fixed Teams Comp",
-        mode=CompetitionMode.FIXED_TEAMS,
-        status=CompetitionStatus.UPCOMING,
-        league_id=test_league.id,
-        start_date=datetime.utcnow() + timedelta(days=7),
-        end_date=datetime.utcnow() + timedelta(days=30),
-        display_timezone="UTC",
-        visibility=Visibility.PUBLIC,
-        join_type=JoinType.OPEN,
-        max_teams_per_participant=3,
-        creator_id=test_user.id,
-        league_admin_ids=[test_user.id],
-    )
-    db_session.add(comp)
-    await db_session.commit()
-    await db_session.refresh(comp)
-    return comp
-
-
-@pytest.fixture
-async def participant(db_session: AsyncSession, test_user: User, active_competition: Competition):
-    """test_user as participant in active_competition."""
-    p = Participant(user_id=test_user.id, competition_id=active_competition.id)
-    db_session.add(p)
-    await db_session.commit()
-    await db_session.refresh(p)
-    return p
+from tests.conftest import _login, _login_full, _make_global_admin
 
 
 # ── Auth: Refresh & Logout ───────────────────────────────────────────
@@ -725,15 +567,12 @@ async def test_list_join_requests_forbidden_for_non_admin(
     against a list of UUID objects, which always returns False. Only global
     admins can pass the admin check as implemented.
     """
-    # test_user is the creator and in league_admin_ids, but NOT global_admin
-    token = await _login(client)
+    # 'second_user' is not an admin on this competition
+    token = await _login(client, email="second@example.com")
     resp = await client.get(
         f"/api/admin/join-requests/{approval_competition.id}",
         headers={"Authorization": f"Bearer {token}"},
     )
-    # BUG: This returns 403 even though test_user IS in league_admin_ids.
-    # The admin check does: str(current_user.id) in competition.league_admin_ids
-    # which compares a string UUID to a list of UUID objects → always False.
     assert resp.status_code == 403
 
 

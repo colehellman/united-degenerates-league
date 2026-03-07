@@ -88,7 +88,8 @@
       "Skill(pr-review-toolkit:review-pr:*)",
       "mcp__github__pull_request_read",
       "Bash(python -m pytest tests/ -v --tb=short)",
-      "mcp__plugin_serena_serena__get_symbols_overview"
+      "mcp__plugin_serena_serena__get_symbols_overview",
+      "Bash(python -m pytest tests/ --co -q)"
     ],
     "deny": [],
     "ask": []

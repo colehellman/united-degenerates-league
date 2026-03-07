@@ -32,6 +32,22 @@ async def get_leaderboard(
             detail="Competition not found",
         )
 
+    if competition.visibility == "private":
+        participant_result = await db.execute(
+            select(Participant).where(
+                and_(
+                    Participant.competition_id == competition.id,
+                    Participant.user_id == current_user.id,
+                )
+            )
+        )
+        participant = participant_result.scalar_one_or_none()
+        if not participant:
+            raise HTTPException(
+                status_code=403,
+                detail="You are not a participant in this private competition",
+            )
+
     # Get all participants with user data
     query = (
         select(Participant, User)
