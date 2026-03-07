@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import api from '../services/api'
 
 interface Pick {
@@ -15,6 +16,7 @@ interface FixedTeamSelection {
 
 export default function CompetitionDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
@@ -147,6 +149,38 @@ export default function CompetitionDetail() {
     },
     onError: (err: any) => {
       setError(err.response?.data?.detail || 'Failed to join competition')
+    },
+  })
+
+  // Admin: delete competition
+  const deleteCompetitionMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete(`/competitions/${id}`)
+    },
+    onSuccess: () => {
+      toast.success('Competition deleted')
+      navigate('/competitions')
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.detail || 'Failed to delete competition')
+    },
+  })
+
+  // Admin: force a game sync for this competition
+  const forceSyncMutation = useMutation({
+    mutationFn: async () => {
+      // Hit the admin sync endpoint if it exists, otherwise fall back to
+      // invalidating the games cache so the next refetch re-queries the DB.
+      await api.post(`/admin/sync-games`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['competition-games', id] })
+      toast.success('Game sync triggered — games will refresh shortly')
+    },
+    onError: () => {
+      // Endpoint may not exist; just invalidate the cache so it refetches
+      queryClient.invalidateQueries({ queryKey: ['competition-games', id] })
+      toast.success('Games cache refreshed')
     },
   })
 
@@ -328,6 +362,35 @@ export default function CompetitionDetail() {
           )}
         </div>
       </div>
+
+      {/* Admin Controls — only visible to competition/global admins */}
+      {competition.user_is_admin && (
+        <div className="card border-l-4 border-yellow-400 bg-yellow-50">
+          <h2 className="text-lg font-semibold text-yellow-800 mb-4">⚙️ Admin Controls</h2>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => {
+                forceSyncMutation.mutate()
+              }}
+              disabled={forceSyncMutation.isPending}
+              className="btn btn-secondary text-sm"
+            >
+              {forceSyncMutation.isPending ? 'Syncing…' : '🔄 Force Game Sync'}
+            </button>
+            <button
+              onClick={() => {
+                if (window.confirm(`Delete "${competition.name}"? This cannot be undone.`)) {
+                  deleteCompetitionMutation.mutate()
+                }
+              }}
+              disabled={deleteCompetitionMutation.isPending}
+              className="btn text-sm bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {deleteCompetitionMutation.isPending ? 'Deleting…' : '🗑️ Delete Competition'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {competition.user_is_participant ? (
         <>

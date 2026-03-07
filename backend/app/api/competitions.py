@@ -37,12 +37,22 @@ async def create_competition(
             detail="End date must be after start date",
         )
 
+    # Set initial status based on start_date.
+    # If start_date is now or in the past the competition is immediately ACTIVE;
+    # otherwise it waits for the scheduled status-update job.
+    now = datetime.utcnow()
+    initial_status = (
+        CompetitionStatus.ACTIVE
+        if competition_data.start_date <= now
+        else CompetitionStatus.UPCOMING
+    )
+
     # Create competition
     competition = Competition(
         **competition_data.model_dump(),
         creator_id=current_user.id,
         league_admin_ids=[current_user.id],  # Creator is default admin
-        status=CompetitionStatus.UPCOMING,
+        status=initial_status,
     )
 
     db.add(competition)
