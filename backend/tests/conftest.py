@@ -43,7 +43,7 @@ async def db_session():
         await conn.execute(text(
             "TRUNCATE TABLE picks, fixed_team_selections, join_requests, "
             "participants, games, competitions, golfers, teams, leagues, "
-            "audit_logs, users CASCADE"
+            "audit_logs, bug_reports, users CASCADE"
         ))
 
     async with async_session() as session:

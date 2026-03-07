@@ -239,6 +239,15 @@ export default function CompetitionDetail() {
     })
   }
 
+  const formatDate = (isoString: string) => {
+    if (!isoString) return '—'
+    return new Date(isoString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  }
+
   const getPicksCount = () => {
     return Object.keys(picks).length
   }
@@ -297,6 +306,26 @@ export default function CompetitionDetail() {
             <p className="text-gray-600">Join Type</p>
             <p className="font-semibold capitalize">{competition.join_type.replace('_', ' ')}</p>
           </div>
+          <div>
+            <p className="text-gray-600">Start Date</p>
+            <p className="font-semibold">{formatDate(competition.start_date)}</p>
+          </div>
+          <div>
+            <p className="text-gray-600">End Date</p>
+            <p className="font-semibold">{formatDate(competition.end_date)}</p>
+          </div>
+          {competition.league && (
+            <div>
+              <p className="text-gray-600">League</p>
+              <p className="font-semibold">{competition.league.display_name || competition.league.name}</p>
+            </div>
+          )}
+          {competition.max_picks_per_day && (
+            <div>
+              <p className="text-gray-600">Max Picks/Day</p>
+              <p className="font-semibold">{competition.max_picks_per_day}</p>
+            </div>
+          )}
         </div>
       </div>
 
