@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, UUID4, field_validator
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from app.models.competition import CompetitionMode, CompetitionStatus, Visibility, JoinType
 
@@ -34,7 +34,19 @@ class CompetitionBase(BaseModel):
 
 
 class CompetitionCreate(CompetitionBase):
-    pass
+    @field_validator("start_date", mode="after")
+    @classmethod
+    def start_date_not_in_past(cls, v: datetime) -> datetime:
+        """Reject start dates more than 60 seconds in the past.
+
+        The 60-second grace window absorbs clock skew and form-submission
+        latency without letting users accidentally create competitions dated
+        hours or days ago.  strip_timezone (inherited from CompetitionBase)
+        has already normalized v to naive UTC before this runs.
+        """
+        if v < datetime.utcnow() - timedelta(seconds=60):
+            raise ValueError("Start date cannot be in the past")
+        return v
 
 
 class CompetitionUpdate(BaseModel):

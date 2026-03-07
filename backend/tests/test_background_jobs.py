@@ -17,6 +17,7 @@ from app.services.background_jobs import (
     update_competition_statuses,
     update_game_scores,
     sync_games_from_api,
+    sync_games_for_competition,
     start_background_jobs,
     stop_background_jobs,
 )
@@ -919,3 +920,78 @@ def test_start_and_stop_background_jobs():
     """start_background_jobs and stop_background_jobs should not raise."""
     start_background_jobs()
     stop_background_jobs()
+
+
+# ---------------------------------------------------------------------------
+# sync_games_for_competition
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_sync_games_for_competition_not_found(db_session: AsyncSession):
+    """Returns a 'not found' message for a non-existent competition id."""
+    session_patcher = _make_session_patcher(db_session)
+    with patch("app.services.background_jobs.async_session", session_patcher):
+        result = await sync_games_for_competition("00000000-0000-0000-0000-000000000000")
+
+    assert result["created"] == 0
+    assert result["updated"] == 0
+    assert "message" in result
+
+
+@pytest.mark.asyncio
+async def test_sync_games_for_competition_no_games_from_espn(
+    db_session: AsyncSession,
+    active_competition: Competition,
+):
+    """Returns a 'no games' message when ESPN returns an empty scoreboard."""
+    session_patcher = _make_session_patcher(db_session)
+    with patch("app.services.background_jobs.async_session", session_patcher), \
+         patch(
+             "app.services.background_jobs.sports_service.get_live_scores",
+             return_value=[],
+         ):
+        result = await sync_games_for_competition(str(active_competition.id))
+
+    assert result["created"] == 0
+    assert result["updated"] == 0
+    assert "message" in result
+
+
+@pytest.mark.asyncio
+async def test_sync_games_for_competition_creates_games(
+    db_session: AsyncSession,
+    active_competition: Competition,
+    test_teams: list,
+):
+    """sync_games_for_competition creates new games when ESPN returns data."""
+    from app.services.sports_api.base import GameData
+    from unittest.mock import AsyncMock
+
+    mock_game = GameData(
+        external_id="sgfc_game_001",
+        home_team=test_teams[0].name,
+        away_team=test_teams[1].name,
+        scheduled_start_time=datetime.utcnow() + timedelta(hours=3),
+        status="scheduled",
+        home_team_external_id=test_teams[0].external_id,
+        away_team_external_id=test_teams[1].external_id,
+        home_team_abbreviation=test_teams[0].abbreviation,
+        away_team_abbreviation=test_teams[1].abbreviation,
+    )
+
+    session_patcher = _make_session_patcher(db_session)
+    with patch("app.services.background_jobs.async_session", session_patcher), \
+         patch(
+             "app.services.background_jobs.sports_service.get_live_scores",
+             new=AsyncMock(return_value=[mock_game]),
+         ):
+        result = await sync_games_for_competition(str(active_competition.id))
+
+    assert result["created"] >= 1
+    # Verify a game landed in the DB for this competition
+    stmt = select(Game).where(
+        Game.competition_id == active_competition.id,
+        Game.external_id == "sgfc_game_001",
+    )
+    db_result = await db_session.execute(stmt)
+    assert db_result.scalar_one_or_none() is not None

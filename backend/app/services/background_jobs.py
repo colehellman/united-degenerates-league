@@ -588,6 +588,82 @@ async def sync_games_from_api():
             await db.rollback()
 
 
+async def sync_games_for_competition(competition_id: str) -> dict:
+    """
+    Sync today's games from ESPN for a single competition.
+
+    Used by the admin "Force Game Sync" button. Runs synchronously so the
+    caller can surface errors and game counts directly to the user rather
+    than relying on the silent background job.
+
+    Returns a dict with keys: created, updated, message.
+    Raises on ESPN / DB failure so callers can return a meaningful error.
+    """
+    async with async_session() as db:
+        # Load competition with its league
+        stmt = (
+            select(Competition)
+            .where(Competition.id == competition_id)
+            .options(selectinload(Competition.league))
+        )
+        result = await db.execute(stmt)
+        competition = result.scalar_one_or_none()
+
+        if not competition:
+            return {"created": 0, "updated": 0, "message": "Competition not found"}
+
+        league = competition.league
+        league_key = league.name.value if hasattr(league.name, "value") else str(league.name)
+
+        # Fetch today's scoreboard from ESPN
+        api_games = await sports_service.get_live_scores(league_key)
+
+        if not api_games:
+            return {
+                "created": 0,
+                "updated": 0,
+                "message": f"No games returned by ESPN for {league_key} today",
+            }
+
+        # Build team cache: external_id -> Team
+        team_stmt = select(Team).where(Team.league_id == league.id)
+        team_result = await db.execute(team_stmt)
+        existing_teams = {t.external_id: t for t in team_result.scalars().all()}
+
+        total_created = 0
+        total_updated = 0
+
+        for game_data in api_games:
+            home_team = await _find_or_create_team(
+                db, league.id, game_data.home_team,
+                game_data.home_team_external_id,
+                game_data.home_team_abbreviation,
+                existing_teams,
+            )
+            away_team = await _find_or_create_team(
+                db, league.id, game_data.away_team,
+                game_data.away_team_external_id,
+                game_data.away_team_abbreviation,
+                existing_teams,
+            )
+
+            if not home_team or not away_team:
+                continue
+
+            created, updated = await _sync_game_for_competition(
+                db, competition, game_data, home_team, away_team,
+            )
+            total_created += created
+            total_updated += updated
+
+        await db.commit()
+        logger.info(
+            f"sync_games_for_competition({competition_id}): "
+            f"{total_created} created, {total_updated} updated"
+        )
+        return {"created": total_created, "updated": total_updated}
+
+
 async def _find_or_create_team(
     db, league_id, name: str, external_id: str, abbreviation: str,
     cache: dict,

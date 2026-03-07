@@ -1,10 +1,12 @@
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.models.competition import Competition, CompetitionStatus
+from app.models.league import League
 from tests.conftest import _login, _make_global_admin
 
 
@@ -30,3 +32,142 @@ async def test_update_competition_status(
 
     await db_session.refresh(active_competition)
     assert active_competition.status == CompetitionStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_create_competition_past_start_date_rejected(
+    client: AsyncClient,
+    test_user: User,
+    test_league: League,
+):
+    """start_date in the past must return 422."""
+    token = await _login(client)
+    past = (datetime.utcnow() - timedelta(hours=2)).isoformat() + "Z"
+    future = (datetime.utcnow() + timedelta(days=7)).isoformat() + "Z"
+
+    resp = await client.post(
+        "/api/competitions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "name": "Past Start Comp",
+            "mode": "daily_picks",
+            "league_id": str(test_league.id),
+            "start_date": past,
+            "end_date": future,
+            "visibility": "public",
+            "join_type": "open",
+        },
+    )
+    assert resp.status_code == 422
+    # Pydantic surfaces the validator message somewhere in the detail
+    detail = resp.json()["detail"]
+    assert any("past" in str(d).lower() for d in (detail if isinstance(detail, list) else [detail]))
+
+
+@pytest.mark.asyncio
+async def test_create_competition_future_start_date_accepted(
+    client: AsyncClient,
+    test_user: User,
+    test_league: League,
+):
+    """start_date in the future must create successfully with UPCOMING status."""
+    token = await _login(client)
+    future_start = (datetime.utcnow() + timedelta(hours=1)).isoformat() + "Z"
+    future_end = (datetime.utcnow() + timedelta(days=7)).isoformat() + "Z"
+
+    resp = await client.post(
+        "/api/competitions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "name": "Future Start Comp",
+            "mode": "daily_picks",
+            "league_id": str(test_league.id),
+            "start_date": future_start,
+            "end_date": future_end,
+            "visibility": "public",
+            "join_type": "open",
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["status"] == "upcoming"
+    assert data["name"] == "Future Start Comp"
+
+
+@pytest.mark.asyncio
+async def test_sync_competition_games_admin_success(
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+):
+    """Competition admin can trigger sync; endpoint returns created/updated counts."""
+    token = await _login(client)
+    mock_result = {"created": 3, "updated": 1}
+
+    # Patch at the source module so the local import inside the endpoint resolves to the mock.
+    with patch(
+        "app.services.background_jobs.sync_games_for_competition",
+        new=AsyncMock(return_value=mock_result),
+    ):
+        resp = await client.post(
+            f"/api/competitions/{active_competition.id}/sync-games",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == mock_result
+
+
+@pytest.mark.asyncio
+async def test_sync_competition_games_non_admin_forbidden(
+    client: AsyncClient,
+    second_user: User,
+    active_competition: Competition,
+):
+    """Non-admin user cannot trigger game sync — 403."""
+    token = await _login(client, email="second@example.com")
+
+    resp = await client.post(
+        f"/api/competitions/{active_competition.id}/sync-games",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_sync_competition_games_not_found(
+    client: AsyncClient,
+    test_user: User,
+):
+    """Sync endpoint returns 404 for unknown competition id."""
+    token = await _login(client)
+
+    resp = await client.post(
+        "/api/competitions/00000000-0000-0000-0000-000000000000/sync-games",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_competition_with_tz_aware_dates(
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    db_session: AsyncSession,
+):
+    """PATCH with tz-aware ISO dates exercises the CompetitionUpdate strip_timezone validator.
+
+    update_competition uses str(current_user.id) comparison so we elevate to
+    global admin (same workaround used by test_update_competition_status).
+    """
+    await _make_global_admin(db_session, test_user)
+    token = await _login(client)
+    future = (datetime.now(tz=timezone.utc) + timedelta(days=14)).isoformat()
+
+    resp = await client.patch(
+        f"/api/competitions/{active_competition.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"end_date": future},
+    )
+    assert resp.status_code == 200
