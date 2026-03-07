@@ -452,8 +452,10 @@ async def sync_competition_games(
     if not competition:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Competition not found")
 
+    # Compare UUID objects directly — league_admin_ids is ARRAY(UUID(as_uuid=True))
+    # so asyncpg returns Python uuid.UUID instances, not strings.
     is_admin = (
-        str(current_user.id) in competition.league_admin_ids
+        current_user.id in competition.league_admin_ids
         or current_user.role == UserRole.GLOBAL_ADMIN
     )
 
