@@ -47,3 +47,4 @@ class User(Base):
     fixed_team_selections = relationship("FixedTeamSelection", back_populates="user", cascade="all, delete-orphan")
     created_competitions = relationship("Competition", back_populates="creator", foreign_keys="Competition.creator_id")
     join_requests = relationship("JoinRequest", back_populates="user", cascade="all, delete-orphan", foreign_keys="JoinRequest.user_id")
+    bug_reports = relationship("BugReport", back_populates="user", cascade="all, delete-orphan")

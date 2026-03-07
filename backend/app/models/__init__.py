@@ -5,6 +5,7 @@ from app.models.game import Game
 from app.models.pick import Pick, FixedTeamSelection
 from app.models.participant import Participant, JoinRequest
 from app.models.audit_log import AuditLog
+from app.models.bug_report import BugReport, BugReportStatus, BugReportCategory
 
 __all__ = [
     "User",
@@ -18,4 +19,7 @@ __all__ = [
     "Participant",
     "JoinRequest",
     "AuditLog",
+    "BugReport",
+    "BugReportStatus",
+    "BugReportCategory",
 ]

@@ -96,7 +96,13 @@
       "Bash(curl -s \"https://api.github.com/repos/colehellman/united-degenerates-league/actions/runs/22806233940/jobs\")",
       "Bash(source ~/.zshrc)",
       "Bash(source ~/.bash_profile)",
-      "Bash(export PATH=$PATH:/usr/local/bin:/opt/homebrew/bin)"
+      "Bash(export PATH=$PATH:/usr/local/bin:/opt/homebrew/bin)",
+      "Bash(python -c \":*)",
+      "Bash(export PATH=\"$PATH:/opt/homebrew/bin\")",
+      "Bash(export PATH=\"/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin\")",
+      "Bash(export PATH=\"/usr/bin:/bin\")",
+      "Bash(export PATH=\"/opt/homebrew/bin:/usr/bin:/bin\")",
+      "Bash(echo \"EXIT:$?\")"
     ],
     "deny": [],
     "ask": []
