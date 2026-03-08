@@ -34,6 +34,24 @@ class LeaderboardEntry(BaseModel):
         from_attributes = True
 
 
+class ParticipantWithUserResponse(BaseModel):
+    """Participant record joined with basic user info, used in admin views."""
+
+    id: UUID4
+    user_id: UUID4
+    username: str
+    email: str
+    joined_at: datetime
+    total_points: int
+    total_wins: int
+    total_losses: int
+    accuracy_percentage: float
+    current_streak: int
+
+    class Config:
+        from_attributes = True
+
+
 class JoinRequestCreate(BaseModel):
     competition_id: UUID4
 

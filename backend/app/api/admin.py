@@ -5,11 +5,12 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.core.deps import get_db, get_current_user, get_current_global_admin
-from app.models.user import User
+from app.models.user import User, AccountStatus
 from app.models.competition import Competition
 from app.models.participant import JoinRequest, JoinRequestStatus, Participant
 from app.models.audit_log import AuditLog, AuditAction
-from app.schemas.participant import JoinRequestResponse
+from app.schemas.participant import JoinRequestResponse, ParticipantWithUserResponse
+from app.schemas.user import UserResponse
 
 router = APIRouter()
 
@@ -253,4 +254,69 @@ async def get_audit_logs(
             "created_at": log.created_at,
         }
         for log in logs
+    ]
+
+
+@router.get("/users", response_model=List[UserResponse])
+async def list_all_users(
+    current_user: User = Depends(get_current_global_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all non-deleted users on the platform (global admin only)."""
+    result = await db.execute(
+        select(User)
+        .where(User.status != AccountStatus.DELETED)
+        .order_by(User.created_at.desc())
+    )
+    users = result.scalars().all()
+    return [UserResponse.model_validate(u) for u in users]
+
+
+@router.get("/competitions/{competition_id}/participants", response_model=List[ParticipantWithUserResponse])
+async def list_competition_participants(
+    competition_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all participants in a competition with user details (competition admin or global admin)."""
+    comp_result = await db.execute(
+        select(Competition).where(Competition.id == competition_id)
+    )
+    competition = comp_result.scalar_one_or_none()
+
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+
+    is_admin = (
+        current_user.id in competition.league_admin_ids
+        or current_user.role == "global_admin"
+    )
+    if not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only competition admins can view participant lists",
+        )
+
+    rows_result = await db.execute(
+        select(Participant, User)
+        .join(User, Participant.user_id == User.id)
+        .where(Participant.competition_id == competition_id)
+        .order_by(Participant.total_points.desc())
+    )
+    rows = rows_result.all()
+
+    return [
+        ParticipantWithUserResponse(
+            id=p.id,
+            user_id=p.user_id,
+            username=u.username,
+            email=u.email,
+            joined_at=p.joined_at,
+            total_points=p.total_points,
+            total_wins=p.total_wins,
+            total_losses=p.total_losses,
+            accuracy_percentage=p.accuracy_percentage,
+            current_streak=p.current_streak,
+        )
+        for p, u in rows
     ]

@@ -431,7 +431,11 @@ async def get_competition_games(
         games_response.append({
             "id": str(game.id),
             "external_id": game.external_id,
-            "scheduled_start_time": game.scheduled_start_time.isoformat(),
+            # Append "Z" so the frontend knows this is UTC. The column is a naive
+            # DateTime but game.py confirms values are always stored as UTC.
+            # Without the suffix, JavaScript treats the string as local time and
+            # displays it 5 hours early for Eastern-timezone users.
+            "scheduled_start_time": game.scheduled_start_time.isoformat() + "Z",
             "status": game.status.value,
             "home_team": {
                 "id": str(home_team.id),
