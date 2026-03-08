@@ -171,3 +171,67 @@ async def test_update_competition_with_tz_aware_dates(
         json={"end_date": future},
     )
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_games_date_filter_respects_utc_offset(
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    test_teams: list,
+    db_session: AsyncSession,
+):
+    """UTC offset parameter must shift the date window so a late-evening local
+    game (stored past midnight UTC) is included in the correct local date.
+
+    Root cause of the date-mismatch bug: a 9pm ET game on 2026-03-08 is stored
+    as 2026-03-09 02:00 UTC. Without utc_offset_minutes the filter window is
+    2026-03-08 00:00–23:59 UTC, which excludes it.  With offset=300 (EST) the
+    window becomes 2026-03-08 05:00 → 2026-03-09 04:59 UTC, which includes it.
+    """
+    from app.models.participant import Participant
+    from app.models.game import Game, GameStatus
+
+    # Make test_user a participant so the endpoint allows access.
+    p = Participant(user_id=test_user.id, competition_id=active_competition.id)
+    db_session.add(p)
+
+    # 9pm ET on 2026-03-08 = 02:00 UTC on 2026-03-09 (naive, as stored by ESPN)
+    late_evening_game = Game(
+        competition_id=active_competition.id,
+        external_id="tz_test_game",
+        home_team_id=test_teams[0].id,
+        away_team_id=test_teams[1].id,
+        scheduled_start_time=datetime(2026, 3, 9, 2, 0, 0),  # UTC naive
+        status=GameStatus.SCHEDULED,
+    )
+    db_session.add(late_evening_game)
+    await db_session.commit()
+
+    token = await _login(client)
+
+    # Without offset: UTC window 2026-03-08 00:00→23:59 — game at 02:00 on 9th
+    # is OUTSIDE the window and must not be returned.
+    resp = await client.get(
+        f"/api/competitions/{active_competition.id}/games",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"date": "2026-03-08", "utc_offset_minutes": 0},
+    )
+    assert resp.status_code == 200
+    ids_no_offset = [g["id"] for g in resp.json()]
+    assert str(late_evening_game.id) not in ids_no_offset, (
+        "Game should NOT appear without timezone offset (it falls on 2026-03-09 UTC)"
+    )
+
+    # With EST offset (300 min west): window shifts to 2026-03-08 05:00 →
+    # 2026-03-09 04:59 UTC — game at 02:00 on 9th IS inside the window.
+    resp = await client.get(
+        f"/api/competitions/{active_competition.id}/games",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"date": "2026-03-08", "utc_offset_minutes": 300},
+    )
+    assert resp.status_code == 200
+    ids_with_offset = [g["id"] for g in resp.json()]
+    assert str(late_evening_game.id) in ids_with_offset, (
+        "Game MUST appear when EST offset is supplied (9pm ET = 2am UTC on the 9th)"
+    )

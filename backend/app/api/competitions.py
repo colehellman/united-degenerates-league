@@ -1,8 +1,8 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.core.deps import get_db, get_current_user, get_current_global_admin
 from app.models.user import User
@@ -26,7 +26,6 @@ router = APIRouter()
 @router.post("", response_model=CompetitionResponse, status_code=status.HTTP_201_CREATED)
 async def create_competition(
     competition_data: CompetitionCreate,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -73,10 +72,17 @@ async def create_competition(
     response.user_is_participant = True
     response.user_is_admin = True
 
-    # Kick off a game sync immediately so the creator sees today's games
-    # without waiting for the 5-minute scheduled job.
-    from app.services.background_jobs import sync_games_from_api
-    background_tasks.add_task(sync_games_from_api)
+    # Sync games for this specific competition immediately so the creator sees
+    # today's games right away without waiting for the 5-minute scheduled job.
+    # Previously used BackgroundTasks (unreliable on Render free tier) and called
+    # sync_games_from_api which syncs ALL competitions — both were wrong.
+    # We fire-and-forget with a bare except so a transient ESPN outage never
+    # prevents the 201 from reaching the client.
+    try:
+        from app.services.background_jobs import sync_games_for_competition
+        await sync_games_for_competition(str(competition.id))
+    except Exception:
+        pass  # Non-critical; the scheduled job and admin sync button are fallbacks
 
     return response
 
@@ -336,6 +342,16 @@ async def join_competition(
 async def get_competition_games(
     competition_id: str,
     date: Optional[str] = Query(None, description="Filter by date (YYYY-MM-DD format)"),
+    utc_offset_minutes: Optional[int] = Query(
+        0,
+        description=(
+            "Client timezone offset in minutes west of UTC "
+            "(JavaScript's Date.getTimezoneOffset()). "
+            "Games are stored as naive UTC; this converts the local date "
+            "window to the equivalent UTC range so a 7pm ET game appears "
+            "on the correct local date rather than the next UTC day."
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -370,12 +386,18 @@ async def get_competition_games(
     # Build query
     query = select(Game).where(Game.competition_id == competition_id)
 
-    # Filter by date if provided
+    # Filter by date if provided, adjusting for the client's local timezone.
+    # Games are stored as naive UTC. The client sends utc_offset_minutes
+    # (JS Date.getTimezoneOffset()) so we can convert "local midnight–midnight"
+    # to the correct UTC range. E.g. UTC-5 (EST) offset=300:
+    #   local 2026-03-08 00:00 → UTC 2026-03-08 05:00
+    #   local 2026-03-08 23:59 → UTC 2026-03-09 04:59
     if date:
         try:
             date_obj = datetime.strptime(date, "%Y-%m-%d")
-            start_of_day = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_of_day = date_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
+            offset = timedelta(minutes=utc_offset_minutes or 0)
+            start_of_day = date_obj + offset
+            end_of_day = start_of_day + timedelta(hours=24) - timedelta(microseconds=1)
             query = query.where(
                 and_(
                     Game.scheduled_start_time >= start_of_day,
