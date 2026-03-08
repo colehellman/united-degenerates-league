@@ -12,9 +12,6 @@ interface User {
 interface AuthState {
   user: User | null
   isAuthenticated: boolean
-  // True until the first checkAuth completes. Prevents routing decisions based
-  // on the initial isAuthenticated: false before the cookie is validated.
-  isInitializing: boolean
   login: (email: string, password: string) => Promise<void>
   register: (email: string, username: string, password: string) => Promise<void>
   logout: () => void
@@ -24,17 +21,17 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
-  isInitializing: true,
 
   login: async (email, password) => {
     const response = await api.post('/auth/login', { email, password })
-    // Tokens are set as httpOnly cookies by the backend.
-    set({ user: response.data.user, isAuthenticated: true, isInitializing: false })
+    // Tokens are now set as httpOnly cookies by the backend.
+    // We only use the response body for the user object.
+    set({ user: response.data.user, isAuthenticated: true })
   },
 
   register: async (email, username, password) => {
     const response = await api.post('/auth/register', { email, username, password })
-    set({ user: response.data.user, isAuthenticated: true, isInitializing: false })
+    set({ user: response.data.user, isAuthenticated: true })
   },
 
   logout: async () => {
@@ -50,9 +47,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       // Cookie is sent automatically — if valid, we get user data back
       const response = await api.get('/users/me')
-      set({ user: response.data, isAuthenticated: true, isInitializing: false })
+      set({ user: response.data, isAuthenticated: true })
     } catch {
-      set({ user: null, isAuthenticated: false, isInitializing: false })
+      set({ user: null, isAuthenticated: false })
     }
   },
 }))

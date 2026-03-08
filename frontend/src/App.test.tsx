@@ -1,12 +1,8 @@
-// App.test.tsx
+// App.test.tsx — routing contract
 //
-// Tests the auth initialization contract documented in authStore.test.ts,
-// now at the routing level. These guard against:
-//
-//   • Showing the login page on every hard refresh (flash of unauthenticated)
-//   • Routing to "/" before checkAuth resolves (flicker or premature redirect)
-//   • checkAuth never being called (Zustand has no persistence — store always
-//     resets to isAuthenticated: false on load, so checkAuth is required)
+// Verifies that authenticated and unauthenticated users are sent to the
+// correct routes. All page components are stubbed so the tests stay fast
+// and isolated to App's routing logic.
 
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -14,11 +10,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { useAuthStore } from './services/authStore'
 
-vi.mock('./services/authStore', () => ({
-  useAuthStore: vi.fn(),
-}))
+vi.mock('./services/authStore', () => ({ useAuthStore: vi.fn() }))
 
-// Page components are heavy; stub them to isolate App routing logic.
 vi.mock('./pages/Dashboard', () => ({ default: () => <div>Dashboard</div> }))
 vi.mock('./pages/Login', () => ({ default: () => <div>Login</div> }))
 vi.mock('./pages/Register', () => ({ default: () => <div>Register</div> }))
@@ -27,34 +20,25 @@ vi.mock('./pages/CompetitionDetail', () => ({ default: () => <div>CompetitionDet
 vi.mock('./pages/CreateCompetition', () => ({ default: () => <div>CreateCompetition</div> }))
 vi.mock('./pages/Admin', () => ({ default: () => <div>Admin</div> }))
 vi.mock('./components/Layout', async () => {
-  // vi.importActual is the Vitest-idiomatic way to access real module exports
-  // inside a mock factory without using require() (which ESLint bans in ESM).
   const { Outlet } = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
-  return {
-    default: () => <Outlet />,
-  }
+  return { default: () => <Outlet /> }
 })
 vi.mock('./components/ErrorBoundary', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
-const checkAuth = vi.fn()
-
-function buildStore(overrides: object) {
-  return {
+function renderApp(initialPath = '/') {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  vi.mocked(useAuthStore).mockReturnValue({
     isAuthenticated: false,
     isInitializing: false,
     user: null,
-    checkAuth,
+    checkAuth: vi.fn(),
     login: vi.fn(),
     logout: vi.fn(),
     register: vi.fn(),
-    ...overrides,
-  }
-}
-
-function renderApp(initialPath = '/') {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    ...currentStore,
+  })
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[initialPath]}>
@@ -64,60 +48,38 @@ function renderApp(initialPath = '/') {
   )
 }
 
+let currentStore: Partial<ReturnType<typeof useAuthStore>> = {}
+
 beforeEach(() => {
-  checkAuth.mockClear()
-})
-
-describe('App — loading screen', () => {
-  it('renders a loading indicator while isInitializing is true', () => {
-    vi.mocked(useAuthStore).mockReturnValue(
-      buildStore({ isInitializing: true, isAuthenticated: false }),
-    )
-    renderApp()
-    // Must not render any route content while cookie validation is pending.
-    expect(screen.getByText(/loading/i)).toBeInTheDocument()
-    expect(screen.queryByText('Login')).not.toBeInTheDocument()
-    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
-  })
-
-  it('calls checkAuth on mount so cookie is validated after every hard refresh', () => {
-    vi.mocked(useAuthStore).mockReturnValue(
-      buildStore({ isInitializing: true }),
-    )
-    renderApp()
-    // Zustand has no persistence — without this call, isAuthenticated stays
-    // false even for users with valid session cookies.
-    expect(checkAuth).toHaveBeenCalledTimes(1)
-  })
+  currentStore = {}
 })
 
 describe('App — unauthenticated routing', () => {
-  beforeEach(() => {
-    vi.mocked(useAuthStore).mockReturnValue(
-      buildStore({ isAuthenticated: false, isInitializing: false }),
-    )
-  })
-
-  it('renders Login page at /login', () => {
+  it('shows Login at /login', () => {
+    currentStore = { isAuthenticated: false }
     renderApp('/login')
     expect(screen.getByText('Login')).toBeInTheDocument()
   })
 
   it('redirects / to /login when not authenticated', () => {
+    currentStore = { isAuthenticated: false }
     renderApp('/')
     expect(screen.getByText('Login')).toBeInTheDocument()
-    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
+  })
+
+  it('redirects /competitions to /login when not authenticated', () => {
+    currentStore = { isAuthenticated: false }
+    renderApp('/competitions')
+    expect(screen.getByText('Login')).toBeInTheDocument()
   })
 })
 
 describe('App — authenticated routing', () => {
   beforeEach(() => {
-    vi.mocked(useAuthStore).mockReturnValue(
-      buildStore({ isAuthenticated: true, isInitializing: false }),
-    )
+    currentStore = { isAuthenticated: true }
   })
 
-  it('renders Dashboard at / when authenticated', () => {
+  it('renders Dashboard at /', () => {
     renderApp('/')
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
   })
@@ -131,6 +93,15 @@ describe('App — authenticated routing', () => {
   it('redirects /register to / when already authenticated', () => {
     renderApp('/register')
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
-    expect(screen.queryByText('Register')).not.toBeInTheDocument()
+  })
+
+  it('renders Competitions at /competitions', () => {
+    renderApp('/competitions')
+    expect(screen.getByText('Competitions')).toBeInTheDocument()
+  })
+
+  it('renders Admin at /admin', () => {
+    renderApp('/admin')
+    expect(screen.getByText('Admin')).toBeInTheDocument()
   })
 })

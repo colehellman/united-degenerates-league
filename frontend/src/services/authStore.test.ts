@@ -1,16 +1,9 @@
 // authStore.test.ts
 //
-// These tests document the authStore contract that prevents two production bugs:
-//
-// BUG 1 — Perpetual loading screen for new users:
-//   isInitializing was missing; without it, every page refresh started with
-//   isAuthenticated: false, sending the user to /login even with valid cookies.
-//   On slow networks, if the Dashboard's /competitions query hung, the isLoading
-//   state never cleared → stuck spinner.
-//
-// BUG 2 — Flash of login page on refresh:
-//   Same root cause. checkAuth was never called, so session cookies were ignored
-//   after a hard refresh.
+// Tests the authStore contract: session cookie validation, login,
+// register, and logout. isInitializing was removed from the store
+// (App.tsx now renders all routes without a loading guard); these
+// tests cover only what the store actually provides.
 
 import { renderHook, act } from '@testing-library/react'
 import { useAuthStore } from './authStore'
@@ -26,60 +19,45 @@ import api from './api'
 
 // Zustand stores are module singletons — reset between tests to avoid leaks.
 beforeEach(() => {
-  useAuthStore.setState({
-    user: null,
-    isAuthenticated: false,
-    isInitializing: true,
-  })
+  useAuthStore.setState({ user: null, isAuthenticated: false })
 })
 
 describe('authStore — initial state', () => {
-  it('starts with isInitializing: true so routes are blocked until cookie is validated', () => {
+  it('starts unauthenticated with no user', () => {
     const { result } = renderHook(() => useAuthStore())
-    expect(result.current.isInitializing).toBe(true)
     expect(result.current.isAuthenticated).toBe(false)
     expect(result.current.user).toBeNull()
   })
 })
 
 describe('authStore — checkAuth', () => {
-  it('valid cookie: sets isAuthenticated true and clears isInitializing', async () => {
+  it('valid cookie: sets user and isAuthenticated true', async () => {
     vi.mocked(api.get).mockResolvedValueOnce({
       data: { id: '1', username: 'alice', email: 'a@example.com', role: 'user', status: 'active' },
     })
 
     const { result } = renderHook(() => useAuthStore())
 
-    await act(async () => {
-      await result.current.checkAuth()
-    })
+    await act(async () => { await result.current.checkAuth() })
 
     expect(result.current.isAuthenticated).toBe(true)
-    expect(result.current.isInitializing).toBe(false)
     expect(result.current.user?.username).toBe('alice')
   })
 
-  it('expired/missing cookie: clears auth and isInitializing so user reaches /login', async () => {
+  it('expired/missing cookie: leaves isAuthenticated false', async () => {
     vi.mocked(api.get).mockRejectedValueOnce(new Error('401 Unauthorized'))
 
     const { result } = renderHook(() => useAuthStore())
 
-    await act(async () => {
-      await result.current.checkAuth()
-    })
+    await act(async () => { await result.current.checkAuth() })
 
     expect(result.current.isAuthenticated).toBe(false)
-    expect(result.current.isInitializing).toBe(false)
     expect(result.current.user).toBeNull()
   })
 })
 
-describe('authStore — login/register clear isInitializing', () => {
-  // If login/register complete before checkAuth (rare on fast connections),
-  // isInitializing must still be cleared — otherwise the app stays on the
-  // loading screen even after a successful login.
-
-  it('login clears isInitializing', async () => {
+describe('authStore — login', () => {
+  it('sets user and isAuthenticated on success', async () => {
     vi.mocked(api.post).mockResolvedValueOnce({
       data: {
         user: { id: '1', username: 'alice', email: 'a@example.com', role: 'user', status: 'active' },
@@ -88,15 +66,27 @@ describe('authStore — login/register clear isInitializing', () => {
 
     const { result } = renderHook(() => useAuthStore())
 
-    await act(async () => {
-      await result.current.login('a@example.com', 'secret')
-    })
+    await act(async () => { await result.current.login('a@example.com', 'secret') })
 
     expect(result.current.isAuthenticated).toBe(true)
-    expect(result.current.isInitializing).toBe(false)
+    expect(result.current.user?.username).toBe('alice')
   })
 
-  it('register clears isInitializing', async () => {
+  it('propagates errors so the Login page can display them', async () => {
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('Invalid credentials'))
+
+    const { result } = renderHook(() => useAuthStore())
+
+    await expect(
+      act(async () => { await result.current.login('a@example.com', 'wrong') })
+    ).rejects.toThrow('Invalid credentials')
+
+    expect(result.current.isAuthenticated).toBe(false)
+  })
+})
+
+describe('authStore — register', () => {
+  it('sets user and isAuthenticated on success', async () => {
     vi.mocked(api.post).mockResolvedValueOnce({
       data: {
         user: { id: '2', username: 'bob', email: 'b@example.com', role: 'user', status: 'active' },
@@ -105,11 +95,44 @@ describe('authStore — login/register clear isInitializing', () => {
 
     const { result } = renderHook(() => useAuthStore())
 
-    await act(async () => {
-      await result.current.register('b@example.com', 'bob', 'secret')
-    })
+    await act(async () => { await result.current.register('b@example.com', 'bob', 'secret') })
 
     expect(result.current.isAuthenticated).toBe(true)
-    expect(result.current.isInitializing).toBe(false)
+    expect(result.current.user?.username).toBe('bob')
+  })
+})
+
+describe('authStore — logout', () => {
+  it('clears user and isAuthenticated', async () => {
+    useAuthStore.setState({
+      user: { id: '1', username: 'alice', email: 'a@example.com', role: 'user', status: 'active' },
+      isAuthenticated: true,
+    })
+
+    vi.mocked(api.post).mockResolvedValueOnce({})
+
+    const { result } = renderHook(() => useAuthStore())
+
+    await act(async () => { await result.current.logout() })
+
+    expect(result.current.isAuthenticated).toBe(false)
+    expect(result.current.user).toBeNull()
+  })
+
+  it('clears local state even if the logout API call fails (best-effort)', async () => {
+    useAuthStore.setState({
+      user: { id: '1', username: 'alice', email: 'a@example.com', role: 'user', status: 'active' },
+      isAuthenticated: true,
+    })
+
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('Network error'))
+
+    const { result } = renderHook(() => useAuthStore())
+
+    // Must NOT throw despite the API failure
+    await act(async () => { await result.current.logout() })
+
+    expect(result.current.isAuthenticated).toBe(false)
+    expect(result.current.user).toBeNull()
   })
 })
