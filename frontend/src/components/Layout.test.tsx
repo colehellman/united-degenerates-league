@@ -29,8 +29,9 @@ describe('Layout', () => {
     // Check for a navigation link
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
     
-    // Check for the user's name
-    expect(screen.getByText('testuser')).toBeInTheDocument();
+    // Username appears in both desktop and mobile nav (CSS hides one via md:hidden).
+    // Use getAllByText since both elements exist in the DOM simultaneously.
+    expect(screen.getAllByText('testuser').length).toBeGreaterThan(0);
 
     // Check for the main content outlet area (via role)
     expect(screen.getByRole('main')).toBeInTheDocument();

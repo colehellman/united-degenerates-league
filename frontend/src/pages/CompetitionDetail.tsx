@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -19,7 +19,13 @@ export default function CompetitionDetail() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
+  // Use local date for initialization. new Date().toISOString() returns UTC,
+  // which can differ from the user's local date (e.g. 8pm ET = next day UTC).
+  const _today = new Date()
+  const _pad = (n: number) => String(n).padStart(2, '0')
+  const [selectedDate, setSelectedDate] = useState<string>(
+    `${_today.getFullYear()}-${_pad(_today.getMonth() + 1)}-${_pad(_today.getDate())}`,
+  )
   const [picks, setPicks] = useState<Record<string, string>>({}) // game_id -> team_id
   const [fixedSelections, setFixedSelections] = useState<string[]>([]) // team_ids or golfer_ids
   const [error, setError] = useState('')
@@ -42,12 +48,16 @@ export default function CompetitionDetail() {
     refetchInterval: 30000, // Refetch every 30s for live updates
   })
 
-  // Fetch available games for daily picks
+  // Fetch available games for daily picks.
+  // Pass utc_offset_minutes so the backend converts the local date window to
+  // the correct UTC range. JS Date.getTimezoneOffset() returns minutes west of
+  // UTC (e.g. EST = 300), matching the backend parameter convention.
+  const utcOffset = new Date().getTimezoneOffset()
   const { data: games, isLoading: gamesLoading } = useQuery({
-    queryKey: ['competition-games', id, selectedDate],
+    queryKey: ['competition-games', id, selectedDate, utcOffset],
     queryFn: async () => {
       const response = await api.get(`/competitions/${id}/games`, {
-        params: { date: selectedDate },
+        params: { date: selectedDate, utc_offset_minutes: utcOffset },
       })
       return response.data
     },
@@ -186,6 +196,29 @@ export default function CompetitionDetail() {
       toast.error(err.response?.data?.detail || 'Game sync failed')
     },
   })
+
+  // Guards against firing the auto-sync more than once per page load.
+  // useMutation's mutate is stable, but re-renders would otherwise re-trigger.
+  const hasAutoSynced = useRef(false)
+
+  // Auto-sync games once on page load for admins when the games list is empty.
+  // This covers the case where the backend sync on creation failed (ESPN outage,
+  // circuit breaker open, etc.) or the admin navigates to an existing competition
+  // with no games yet. The hasAutoSynced ref prevents re-triggering on re-renders.
+  useEffect(() => {
+    if (
+      hasAutoSynced.current ||
+      !competition?.user_is_admin ||
+      gamesLoading ||
+      !games ||
+      games.length > 0 ||
+      forceSyncMutation.isPending
+    ) {
+      return
+    }
+    hasAutoSynced.current = true
+    forceSyncMutation.mutate()
+  }, [competition?.user_is_admin, gamesLoading, games, forceSyncMutation.isPending])
 
   const handlePickChange = (gameId: string, teamId: string) => {
     setPicks((prev) => ({
@@ -475,97 +508,129 @@ export default function CompetitionDetail() {
               {gamesLoading ? (
                 <p>Loading games...</p>
               ) : games && games.length > 0 ? (
-                <>
-                  <div className="space-y-4 mb-6">
-                    {games.map((game: any) => {
-                      const locked = isGameLocked(game)
-                      const userPick = picks[game.id]
+                (() => {
+                  // When every game on this date has started, show only the
+                  // games the user picked so they can track their results.
+                  // Games with no pick made are irrelevant at that point.
+                  const allLocked = games.every((g: any) => isGameLocked(g))
+                  const hasPicks = Object.keys(picks).length > 0
+                  const displayGames: any[] =
+                    allLocked && hasPicks ? games.filter((g: any) => picks[g.id]) : games
 
-                      return (
-                        <div
-                          key={game.id}
-                          className={`border rounded-lg p-4 ${locked ? 'bg-gray-50' : 'bg-white'}`}
-                        >
-                          <div className="flex justify-between items-center mb-3">
-                            <div className="text-sm text-gray-600">
-                              {formatGameTime(game.scheduled_start_time)}
-                            </div>
-                            {getGameStatusBadge(game)}
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4">
-                            {/* Away Team */}
-                            <label
-                              className={`border rounded-lg p-4 cursor-pointer transition ${
-                                locked
-                                  ? 'cursor-not-allowed opacity-60'
-                                  : userPick === game.away_team.id
-                                  ? 'border-primary-500 bg-primary-50'
-                                  : 'border-gray-200 hover:border-primary-300'
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name={`game-${game.id}`}
-                                value={game.away_team.id}
-                                checked={userPick === game.away_team.id}
-                                onChange={() => handlePickChange(game.id, game.away_team.id)}
-                                disabled={locked}
-                                className="sr-only"
-                              />
-                              <div className="font-semibold">{game.away_team.name}</div>
-                              {game.away_team_score !== null && (
-                                <div className="text-2xl font-bold mt-2">{game.away_team_score}</div>
-                              )}
-                            </label>
-
-                            {/* Home Team */}
-                            <label
-                              className={`border rounded-lg p-4 cursor-pointer transition ${
-                                locked
-                                  ? 'cursor-not-allowed opacity-60'
-                                  : userPick === game.home_team.id
-                                  ? 'border-primary-500 bg-primary-50'
-                                  : 'border-gray-200 hover:border-primary-300'
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name={`game-${game.id}`}
-                                value={game.home_team.id}
-                                checked={userPick === game.home_team.id}
-                                onChange={() => handlePickChange(game.id, game.home_team.id)}
-                                disabled={locked}
-                                className="sr-only"
-                              />
-                              <div className="font-semibold">{game.home_team.name}</div>
-                              {game.home_team_score !== null && (
-                                <div className="text-2xl font-bold mt-2">{game.home_team_score}</div>
-                              )}
-                            </label>
-                          </div>
-
-                          {game.venue_name && (
-                            <div className="text-xs text-gray-500 mt-2">
-                              @ {game.venue_name}
-                            </div>
-                          )}
+                  return (
+                    <>
+                      {allLocked && hasPicks && (
+                        <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-4 text-sm">
+                          All games have started — showing your {displayGames.length} pick{displayGames.length !== 1 ? 's' : ''} for today.
                         </div>
-                      )
-                    })}
-                  </div>
+                      )}
 
-                  {/* Submit Button - Sticky on mobile */}
-                  <div className="sticky bottom-0 bg-white border-t pt-4 -mx-6 px-6 -mb-6 pb-6">
-                    <button
-                      onClick={handleSubmitPicks}
-                      disabled={submitPicksMutation.isPending || getPicksCount() === 0}
-                      className="btn btn-primary w-full"
-                    >
-                      {submitPicksMutation.isPending ? 'Submitting...' : `Submit ${getPicksCount()} Pick${getPicksCount() !== 1 ? 's' : ''}`}
-                    </button>
-                  </div>
-                </>
+                      <div className="space-y-4 mb-6">
+                        {displayGames.map((game: any) => {
+                          const locked = isGameLocked(game)
+                          const userPick = picks[game.id]
+
+                          // Helper for team card styling.
+                          // Locked + picked → full highlight so the user clearly sees their selection.
+                          // Locked + not picked → subdued, since it's informational only.
+                          // Open → standard interactive style.
+                          const teamCardClass = (teamId: string) => {
+                            if (!locked) {
+                              return userPick === teamId
+                                ? 'border-primary-500 bg-primary-50 cursor-pointer'
+                                : 'border-gray-200 hover:border-primary-300 cursor-pointer'
+                            }
+                            if (userPick === teamId) {
+                              return 'border-primary-500 bg-primary-50 cursor-default'
+                            }
+                            return 'border-gray-100 bg-gray-50 opacity-40 cursor-default'
+                          }
+
+                          return (
+                            <div
+                              key={game.id}
+                              className={`border rounded-lg p-4 ${locked ? 'bg-gray-50' : 'bg-white'}`}
+                            >
+                              <div className="flex justify-between items-center mb-3">
+                                <div className="text-sm text-gray-600">
+                                  {formatGameTime(game.scheduled_start_time)}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {locked && userPick && (
+                                    <span className="text-xs font-semibold text-primary-600 uppercase tracking-wide">
+                                      Your pick
+                                    </span>
+                                  )}
+                                  {getGameStatusBadge(game)}
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-3">
+                                {/* Away Team */}
+                                <label className={`border rounded-lg p-3 transition ${teamCardClass(game.away_team.id)}`}>
+                                  <input
+                                    type="radio"
+                                    name={`game-${game.id}`}
+                                    value={game.away_team.id}
+                                    checked={userPick === game.away_team.id}
+                                    onChange={() => handlePickChange(game.id, game.away_team.id)}
+                                    disabled={locked}
+                                    className="sr-only"
+                                  />
+                                  <div className="font-semibold text-sm">{game.away_team.city}</div>
+                                  <div className="font-bold">{game.away_team.name}</div>
+                                  {game.away_team_score !== null && (
+                                    <div className="text-2xl font-bold mt-1">{game.away_team_score}</div>
+                                  )}
+                                </label>
+
+                                {/* Home Team */}
+                                <label className={`border rounded-lg p-3 transition ${teamCardClass(game.home_team.id)}`}>
+                                  <input
+                                    type="radio"
+                                    name={`game-${game.id}`}
+                                    value={game.home_team.id}
+                                    checked={userPick === game.home_team.id}
+                                    onChange={() => handlePickChange(game.id, game.home_team.id)}
+                                    disabled={locked}
+                                    className="sr-only"
+                                  />
+                                  <div className="text-xs text-gray-500 font-medium">HOME</div>
+                                  <div className="font-semibold text-sm">{game.home_team.city}</div>
+                                  <div className="font-bold">{game.home_team.name}</div>
+                                  {game.home_team_score !== null && (
+                                    <div className="text-2xl font-bold mt-1">{game.home_team_score}</div>
+                                  )}
+                                </label>
+                              </div>
+
+                              {game.venue_name && (
+                                <div className="text-xs text-gray-400 mt-2">
+                                  @ {game.venue_name}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {/* Submit Button — only shown while games are still open */}
+                      {!allLocked && (
+                        <div className="sticky bottom-0 bg-white border-t pt-4 -mx-4 px-4 md:-mx-6 md:px-6 -mb-6 pb-6">
+                          <button
+                            onClick={handleSubmitPicks}
+                            disabled={submitPicksMutation.isPending || getPicksCount() === 0}
+                            className="btn btn-primary w-full"
+                          >
+                            {submitPicksMutation.isPending
+                              ? 'Submitting...'
+                              : `Submit ${getPicksCount()} Pick${getPicksCount() !== 1 ? 's' : ''}`}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()
               ) : (
                 <p className="text-gray-600">
                   No pickable games for this date. Check upcoming dates to make your picks.
