@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 from typing import List, Union
 
@@ -26,6 +26,26 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> List[str]:
         """Parse CORS_ORIGINS string into a list."""
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @model_validator(mode="after")
+    def check_production_secrets(self) -> "Settings":
+        """Refuse to start in production if insecure defaults are still set.
+
+        Catches misconfigured deploys before they silently accept weak JWTs
+        or connect to a DB with a publicly-known password.
+        """
+        if self.ENVIRONMENT == "production":
+            if self.SECRET_KEY == "dev-secret-key-change-in-production":
+                raise ValueError(
+                    "SECRET_KEY must be changed from the default in production. "
+                    "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                )
+            if "udl_password" in self.DATABASE_URL:
+                raise ValueError(
+                    "DATABASE_URL still contains the default development password. "
+                    "Set a strong, unique password in production."
+                )
+        return self
 
     # Sports Data APIs - Multiple providers for failover
     # ESPN API
