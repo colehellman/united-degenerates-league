@@ -120,7 +120,21 @@
       "Bash(/opt/homebrew/bin/npm run lint)",
       "Bash(PATH=\"/opt/homebrew/Cellar/node/25.7.0/bin:$PATH\")",
       "Bash(node /opt/homebrew/Cellar/node/25.7.0/bin/npm run lint)",
-      "Bash(export PATH=\"/opt/homebrew/Cellar/node/25.7.0/bin:$PATH\")"
+      "Bash(export PATH=\"/opt/homebrew/Cellar/node/25.7.0/bin:$PATH\")",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\" npm test -- --run --coverage)",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\" npm install --save-dev @vitest/coverage-v8)",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\" npm install --save-dev @vitest/coverage-v8 --legacy-peer-deps)",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\" npm test -- --run)",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\" cat /Users/colehellman/workspace/udl/frontend/node_modules/vitest/package.json)",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\" npm install --save-dev @vitest/coverage-v8@1.6.1 --legacy-peer-deps)",
+      "Bash(npm run test -- --coverage --reporter=dot)",
+      "Bash(/opt/homebrew/bin/npm --version)",
+      "Bash(/opt/homebrew/bin/node /opt/homebrew/bin/npm --version)",
+      "Bash(/opt/homebrew/bin/node /opt/homebrew/bin/npm run test -- --coverage --reporter=dot)",
+      "Bash(/opt/homebrew/bin/node /Users/colehellman/workspace/udl/frontend/node_modules/.bin/vitest --coverage --reporter=dot)",
+      "Bash(NODE=/opt/homebrew/bin/node)",
+      "Bash($NODE /Users/colehellman/workspace/udl/frontend/node_modules/.bin/vitest run --coverage --reporter=verbose)",
+      "Bash(env PATH=\"/opt/homebrew/bin:$PATH\" npx vitest run --coverage --reporter=verbose)"
     ],
     "deny": [],
     "ask": []
