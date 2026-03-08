@@ -45,11 +45,17 @@ beforeEach(() => {
 describe('Layout — navigation', () => {
   it('renders brand link, nav links, user info, and action buttons', () => {
     renderLayout()
+    // Brand link: full name in a hidden-sm span, abbreviated "UDL" in another.
+    // getByText matches the specific span text, not the combined Link text.
     expect(screen.getByText('United Degenerates League')).toBeInTheDocument()
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
     expect(screen.getByText('Competitions')).toBeInTheDocument()
-    expect(screen.getByText('testuser')).toBeInTheDocument()
+    // Username renders in both the desktop nav and mobile top-bar (CSS hides
+    // one at runtime, but in jsdom both spans are in the DOM simultaneously).
+    expect(screen.getAllByText('testuser').length).toBeGreaterThan(0)
     expect(screen.getByRole('main')).toBeInTheDocument()
+    // Desktop-only "Report a Bug" and "Logout" buttons; mobile dropdown only
+    // appears when the hamburger is clicked, so both have single matches here.
     expect(screen.getByRole('button', { name: /report a bug/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /logout/i })).toBeInTheDocument()
   })
@@ -57,6 +63,7 @@ describe('Layout — navigation', () => {
   it('shows Admin ★ link for global_admin role', () => {
     mockUser = { username: 'admin', role: 'global_admin' }
     renderLayout()
+    // Only the desktop Admin ★ link is in the DOM (mobile dropdown is closed).
     expect(screen.getByText(/Admin ★/)).toBeInTheDocument()
   })
 
@@ -69,6 +76,7 @@ describe('Layout — navigation', () => {
 describe('Layout — logout', () => {
   it('calls logout when Logout button is clicked', () => {
     renderLayout()
+    // Desktop Logout button — the only one visible when mobile menu is closed.
     fireEvent.click(screen.getByRole('button', { name: /logout/i }))
     expect(mockLogout).toHaveBeenCalledTimes(1)
   })

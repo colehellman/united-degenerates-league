@@ -1,6 +1,6 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 from typing import List, Optional
 from sqlalchemy import select, and_, or_, update
@@ -742,13 +742,19 @@ async def _sync_game_for_competition(
 
         return (0, 1)
     else:
-        # Create new game
+        # Create new game.
+        # The column is TIMESTAMP WITHOUT TIME ZONE; asyncpg rejects tz-aware
+        # datetimes (ESPN returns UTC-aware values).  Normalise to naive UTC.
+        start_time = game_data.scheduled_start_time
+        if start_time is not None and start_time.tzinfo is not None:
+            start_time = start_time.astimezone(timezone.utc).replace(tzinfo=None)
+
         game = Game(
             competition_id=competition.id,
             external_id=game_data.external_id,
             home_team_id=home_team.id,
             away_team_id=away_team.id,
-            scheduled_start_time=game_data.scheduled_start_time,
+            scheduled_start_time=start_time,
             status=GameStatus(game_data.status),
             home_team_score=game_data.home_score,
             away_team_score=game_data.away_score,
