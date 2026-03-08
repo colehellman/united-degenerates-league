@@ -19,7 +19,9 @@ function App() {
     // the page always sees isAuthenticated: false (Zustand has no persistence),
     // even when the user has a valid session — forcing an unnecessary re-login.
     checkAuth()
-  }, [])
+  // Zustand actions are stable references — this won't cause re-runs, but the
+  // linter requires the dep to be listed explicitly.
+  }, [checkAuth])
 
   // Block routing decisions until we know whether the cookie is valid.
   // This prevents a flash of the login page for already-authenticated users.

@@ -218,7 +218,8 @@ export default function CompetitionDetail() {
     }
     hasAutoSynced.current = true
     forceSyncMutation.mutate()
-  }, [competition?.user_is_admin, gamesLoading, games, forceSyncMutation.isPending])
+  // forceSyncMutation covers .isPending and .mutate — no need to list properties separately.
+  }, [competition?.user_is_admin, gamesLoading, games, forceSyncMutation])
 
   const handlePickChange = (gameId: string, teamId: string) => {
     setPicks((prev) => ({

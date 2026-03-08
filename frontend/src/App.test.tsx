@@ -26,12 +26,14 @@ vi.mock('./pages/Competitions', () => ({ default: () => <div>Competitions</div> 
 vi.mock('./pages/CompetitionDetail', () => ({ default: () => <div>CompetitionDetail</div> }))
 vi.mock('./pages/CreateCompetition', () => ({ default: () => <div>CreateCompetition</div> }))
 vi.mock('./pages/Admin', () => ({ default: () => <div>Admin</div> }))
-vi.mock('./components/Layout', () => ({
-  default: () => {
-    const { Outlet } = require('react-router-dom')
-    return <div><Outlet /></div>
-  },
-}))
+vi.mock('./components/Layout', async () => {
+  // vi.importActual is the Vitest-idiomatic way to access real module exports
+  // inside a mock factory without using require() (which ESLint bans in ESM).
+  const { Outlet } = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
+  return {
+    default: () => <Outlet />,
+  }
+})
 vi.mock('./components/ErrorBoundary', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))

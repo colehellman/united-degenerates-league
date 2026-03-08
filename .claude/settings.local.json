@@ -136,7 +136,8 @@
       "Bash(python -m pytest tests/test_competitions_api.py::test_games_date_filter_respects_utc_offset -v)",
       "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\")",
       "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\" python3 -m pytest /Users/colehellman/workspace/udl/backend/tests/test_competitions_api.py::test_games_date_filter_respects_utc_offset -v)",
-      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\" npm test -- --run)"
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\" npm test -- --run)",
+      "Bash(PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\" npm run lint)"
     ],
     "deny": [],
     "ask": []
