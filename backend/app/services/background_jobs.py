@@ -163,6 +163,13 @@ async def update_game_scores():
                 logger.debug("No active games to update")
                 return
 
+            # Sort by primary key so concurrent job runs always acquire row
+            # locks in the same order.  Without this, two concurrent calls
+            # (e.g. API process + worker process both running the 60s job)
+            # can deadlock: process A locks game X then waits for game Y,
+            # while process B already holds Y and waits for X.
+            games = sorted(games, key=lambda g: g.id)
+
             logger.info(f"Found {len(games)} games to update")
 
             # Group games by league for efficient API calls
