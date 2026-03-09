@@ -13,6 +13,7 @@ vi.mock('./api', () => ({
     get: vi.fn(),
     post: vi.fn(),
   },
+  suppressRefreshRedirect: vi.fn(),
 }))
 
 import api from './api'
