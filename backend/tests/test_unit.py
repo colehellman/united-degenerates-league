@@ -24,3 +24,30 @@ def test_cors_origins_list_parsing():
     # Test with only whitespace and commas
     settings = Settings(CORS_ORIGINS=" , , ")
     assert settings.cors_origins_list == []
+
+
+@pytest.mark.unit
+def test_production_rejects_default_secret_key():
+    """check_production_secrets raises when production still has the dev SECRET_KEY (lines 38-42).
+
+    Init kwargs take priority over env vars in pydantic-settings v2, so this
+    instantiation uses the values we pass rather than any CI environment variable.
+    DATABASE_URL is set to a safe value so only the first branch fires.
+    """
+    with pytest.raises(ValueError, match="SECRET_KEY must be changed"):
+        Settings(
+            ENVIRONMENT="production",
+            SECRET_KEY="dev-secret-key-change-in-production",
+            DATABASE_URL="postgresql://user:securepass@host/db",
+        )
+
+
+@pytest.mark.unit
+def test_production_rejects_default_db_password():
+    """check_production_secrets raises when DATABASE_URL contains the dev password (lines 43-47)."""
+    with pytest.raises(ValueError, match="DATABASE_URL still contains"):
+        Settings(
+            ENVIRONMENT="production",
+            SECRET_KEY="a-safe-unique-production-secret-key",
+            DATABASE_URL="postgresql://user:udl_password@host/db",
+        )

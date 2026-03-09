@@ -222,10 +222,28 @@ export default function CompetitionDetail() {
   }, [competition?.user_is_admin, gamesLoading, games, forceSyncMutation])
 
   const handlePickChange = (gameId: string, teamId: string) => {
-    setPicks((prev) => ({
-      ...prev,
-      [gameId]: teamId,
-    }))
+    setPicks((prev) => {
+      // Toggle off: clicking the already-selected team deselects it
+      if (prev[gameId] === teamId) {
+        const next = { ...prev }
+        delete next[gameId]
+        setError('')
+        return next
+      }
+
+      // Switching the team on an already-picked game doesn't add to the count
+      const isNewGame = !prev[gameId]
+      const maxPicks = competition?.max_picks_per_day
+      if (isNewGame && maxPicks && Object.keys(prev).length >= maxPicks) {
+        setError(
+          `Competition rules only allow ${maxPicks} pick${maxPicks !== 1 ? 's' : ''} per day`
+        )
+        return prev // no state change
+      }
+
+      setError('')
+      return { ...prev, [gameId]: teamId }
+    })
   }
 
   const handleFixedSelectionToggle = (selectionId: string) => {
@@ -567,42 +585,30 @@ export default function CompetitionDetail() {
                               </div>
 
                               <div className="grid grid-cols-2 gap-3">
-                                {/* Away Team */}
-                                <label className={`border rounded-lg p-3 transition ${teamCardClass(game.away_team.id)}`}>
-                                  <input
-                                    type="radio"
-                                    name={`game-${game.id}`}
-                                    value={game.away_team.id}
-                                    checked={userPick === game.away_team.id}
-                                    onChange={() => handlePickChange(game.id, game.away_team.id)}
-                                    disabled={locked}
-                                    className="sr-only"
-                                  />
+                                {/* Away Team — div instead of label+radio so clicking a selected team deselects it */}
+                                <div
+                                  onClick={() => !locked && handlePickChange(game.id, game.away_team.id)}
+                                  className={`border rounded-lg p-3 transition select-none ${teamCardClass(game.away_team.id)}`}
+                                >
                                   <div className="font-semibold text-sm">{game.away_team.city}</div>
                                   <div className="font-bold">{game.away_team.name}</div>
                                   {game.away_team_score !== null && (
                                     <div className="text-2xl font-bold mt-1">{game.away_team_score}</div>
                                   )}
-                                </label>
+                                </div>
 
                                 {/* Home Team */}
-                                <label className={`border rounded-lg p-3 transition ${teamCardClass(game.home_team.id)}`}>
-                                  <input
-                                    type="radio"
-                                    name={`game-${game.id}`}
-                                    value={game.home_team.id}
-                                    checked={userPick === game.home_team.id}
-                                    onChange={() => handlePickChange(game.id, game.home_team.id)}
-                                    disabled={locked}
-                                    className="sr-only"
-                                  />
+                                <div
+                                  onClick={() => !locked && handlePickChange(game.id, game.home_team.id)}
+                                  className={`border rounded-lg p-3 transition select-none ${teamCardClass(game.home_team.id)}`}
+                                >
                                   <div className="text-xs text-gray-500 font-medium">HOME</div>
                                   <div className="font-semibold text-sm">{game.home_team.city}</div>
                                   <div className="font-bold">{game.home_team.name}</div>
                                   {game.home_team_score !== null && (
                                     <div className="text-2xl font-bold mt-1">{game.home_team_score}</div>
                                   )}
-                                </label>
+                                </div>
                               </div>
 
                               {game.venue_name && (

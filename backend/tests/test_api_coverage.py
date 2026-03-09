@@ -743,3 +743,44 @@ async def test_update_existing_pick(
     )
     picks = result.scalars().all()
     assert len(picks) == 1
+
+
+# ── Password validator edge cases ─────────────────────────────────────
+# These cover the "has uppercase, missing digit" branch in the synchronous
+# @field_validator methods (schemas/user.py lines 21, 62, 64).  The
+# existing test_register_weak_password uses "nouppercase" which only
+# exercises the "no uppercase" branch (line 19) and exits early.
+
+
+@pytest.mark.asyncio
+async def test_register_password_has_uppercase_no_digit(client: AsyncClient):
+    """Password with uppercase but no digit triggers the digit-check raise (line 21)."""
+    resp = await client.post(
+        "/api/auth/register",
+        json={"email": "digit@example.com", "username": "digituser", "password": "Abcdefgh"},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_change_password_new_no_uppercase(client: AsyncClient, test_user: User):
+    """new_password with no uppercase triggers the uppercase-check raise (line 62)."""
+    token = await _login(client)
+    resp = await client.post(
+        "/api/users/me/change-password",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"current_password": "Password123", "new_password": "nouppercase1"},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_change_password_new_no_digit(client: AsyncClient, test_user: User):
+    """new_password with uppercase but no digit triggers the digit-check raise (line 64)."""
+    token = await _login(client)
+    resp = await client.post(
+        "/api/users/me/change-password",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"current_password": "Password123", "new_password": "Abcdefgh"},
+    )
+    assert resp.status_code == 422
