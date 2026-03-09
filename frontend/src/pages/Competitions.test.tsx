@@ -21,13 +21,32 @@ function renderCompetitions() {
   )
 }
 
+afterEach(() => { document.title = '' })
 beforeEach(() => vi.clearAllMocks())
 
 describe('Competitions — loading state', () => {
-  it('shows loading indicator', () => {
+  it('shows spinner while fetching', () => {
     vi.mocked(api.get).mockReturnValue(new Promise(() => {}))
     renderCompetitions()
-    expect(screen.getByText(/loading competitions/i)).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
+  })
+})
+
+describe('Competitions — error state', () => {
+  it('shows error message instead of empty state when the API fails', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('Network error'))
+    renderCompetitions()
+    await screen.findByText(/failed to load competitions/i)
+    expect(screen.queryByText(/no competitions available/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('Competitions — document title', () => {
+  it('sets document.title to Browse Competitions | UDL', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ data: [] })
+    renderCompetitions()
+    await screen.findByText(/no competitions available/i)
+    expect(document.title).toBe('Browse Competitions | UDL')
   })
 })
 

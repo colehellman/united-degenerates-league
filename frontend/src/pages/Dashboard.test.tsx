@@ -21,14 +21,32 @@ function renderDashboard() {
   )
 }
 
+afterEach(() => { document.title = '' })
 beforeEach(() => vi.clearAllMocks())
 
 describe('Dashboard — loading state', () => {
-  it('shows loading indicator while fetching', () => {
-    // Never resolves so loading stays visible
+  it('shows spinner while fetching', () => {
     vi.mocked(api.get).mockReturnValue(new Promise(() => {}))
     renderDashboard()
-    expect(screen.getByText(/loading/i)).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
+  })
+})
+
+describe('Dashboard — error state', () => {
+  it('shows error message instead of empty state when the API fails', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('Network error'))
+    renderDashboard()
+    await screen.findByText(/failed to load competitions/i)
+    expect(screen.queryByText(/haven't joined/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('Dashboard — document title', () => {
+  it('sets document.title to Dashboard | UDL', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ data: [] })
+    renderDashboard()
+    await screen.findByText(/haven't joined/i)
+    expect(document.title).toBe('Dashboard | UDL')
   })
 })
 
@@ -63,6 +81,18 @@ describe('Dashboard — active competitions', () => {
     expect(screen.getByText('Active Competitions')).toBeInTheDocument()
     expect(screen.getByText('Active')).toBeInTheDocument()
     expect(screen.getByText('10 participants')).toBeInTheDocument()
+  })
+})
+
+describe('Dashboard — mode text formatting', () => {
+  it('formats mode with underscores as readable words', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({
+      data: [{ id: '1', name: 'NBA Picks', status: 'active', mode: 'daily_picks', participant_count: 5 }],
+    })
+    renderDashboard()
+    await screen.findByText('NBA Picks')
+    expect(screen.getByText('daily picks')).toBeInTheDocument()
+    expect(screen.queryByText('daily_picks')).not.toBeInTheDocument()
   })
 })
 

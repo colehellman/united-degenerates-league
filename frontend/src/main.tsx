@@ -19,7 +19,7 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
+      <Toaster position="bottom-center" toastOptions={{ duration: 4000 }} />
       <BrowserRouter>
         <App />
       </BrowserRouter>

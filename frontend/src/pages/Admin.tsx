@@ -4,6 +4,7 @@ import { Navigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../services/authStore'
 import api from '../services/api'
+import Spinner from '../components/Spinner'
 
 const BUG_STATUS_LABELS: Record<string, string> = {
   open: 'Open',
@@ -95,7 +96,7 @@ const STATUS_BADGE: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 function BugReportsTab({ queryClient }: { queryClient: any }) {
-  const { data: reports, isLoading } = useQuery({
+  const { data: reports, isLoading, isError } = useQuery({
     queryKey: ['admin-bug-reports'],
     queryFn: async () => {
       const res = await api.get('/bug-reports')
@@ -113,7 +114,15 @@ function BugReportsTab({ queryClient }: { queryClient: any }) {
     onError: () => toast.error('Failed to update status'),
   })
 
-  if (isLoading) return <p className="text-gray-600">Loading bug reports…</p>
+  if (isLoading) return <Spinner />
+
+  if (isError) {
+    return (
+      <div className="card text-center py-12">
+        <p className="text-red-600 font-medium">Failed to load bug reports.</p>
+      </div>
+    )
+  }
 
   if (!reports || reports.length === 0) {
     return (
@@ -181,7 +190,7 @@ function BugReportsTab({ queryClient }: { queryClient: any }) {
 // ---------------------------------------------------------------------------
 
 function AuditLogsTab() {
-  const { data: logs, isLoading } = useQuery({
+  const { data: logs, isLoading, isError } = useQuery({
     queryKey: ['admin-audit-logs'],
     queryFn: async () => {
       const res = await api.get('/admin/audit-logs', { params: { limit: 100 } })
@@ -189,7 +198,15 @@ function AuditLogsTab() {
     },
   })
 
-  if (isLoading) return <p className="text-gray-600">Loading audit logs…</p>
+  if (isLoading) return <Spinner />
+
+  if (isError) {
+    return (
+      <div className="card text-center py-12">
+        <p className="text-red-600 font-medium">Failed to load audit logs.</p>
+      </div>
+    )
+  }
 
   if (!logs || logs.length === 0) {
     return (
@@ -239,7 +256,7 @@ function AuditLogsTab() {
 // ---------------------------------------------------------------------------
 
 function UsersTab() {
-  const { data: users, isLoading } = useQuery({
+  const { data: users, isLoading, isError } = useQuery({
     queryKey: ['admin-users'],
     queryFn: async () => {
       const res = await api.get('/admin/users')
@@ -247,7 +264,15 @@ function UsersTab() {
     },
   })
 
-  if (isLoading) return <p className="text-gray-600">Loading users…</p>
+  if (isLoading) return <Spinner />
+
+  if (isError) {
+    return (
+      <div className="card text-center py-12">
+        <p className="text-red-600 font-medium">Failed to load users.</p>
+      </div>
+    )
+  }
 
   if (!users || users.length === 0) {
     return (

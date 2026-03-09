@@ -11,12 +11,17 @@ export default function Layout() {
 
   const closeMobileMenu = () => setMobileMenuOpen(false)
 
-  const navLinkClass = (path: string) =>
-    `block px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-      location.pathname === path
-        ? 'bg-primary-700 text-white'
-        : 'text-primary-100 hover:bg-primary-700 hover:text-white'
-    }`
+  // Exact match for '/' (Dashboard) so it doesn't highlight on every sub-route.
+  // All other links use startsWith so /competitions/123 keeps Competitions active.
+  const isActive = (path: string) =>
+    path === '/' ? location.pathname === '/' : location.pathname.startsWith(path)
+
+  const navLinkProps = (path: string) => ({
+    className: `block px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+      isActive(path) ? 'bg-primary-700 text-white' : 'text-primary-100 hover:bg-primary-700 hover:text-white'
+    }`,
+    ...(isActive(path) ? { 'aria-current': 'page' as const } : {}),
+  })
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -38,8 +43,8 @@ export default function Layout() {
 
             {/* Desktop nav links */}
             <div className="hidden md:flex items-center space-x-1">
-              <Link to="/" className={navLinkClass('/')}>Dashboard</Link>
-              <Link to="/competitions" className={navLinkClass('/competitions')}>Competitions</Link>
+              <Link to="/" {...navLinkProps('/')}>Dashboard</Link>
+              <Link to="/competitions" {...navLinkProps('/competitions')}>Competitions</Link>
               {user?.role === 'global_admin' && (
                 <Link to="/admin" className="block px-3 py-2 rounded-md text-sm font-medium text-yellow-200 hover:bg-primary-700 transition-colors">
                   Admin ★
@@ -67,6 +72,7 @@ export default function Layout() {
               <button
                 onClick={() => setMobileMenuOpen((o) => !o)}
                 aria-label="Toggle menu"
+                aria-expanded={mobileMenuOpen}
                 className="p-2 rounded-md text-primary-100 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
               >
                 {/* Hamburger / X icon */}
@@ -87,10 +93,10 @@ export default function Layout() {
         {/* Mobile dropdown menu */}
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-primary-500 bg-primary-700 px-4 py-3 space-y-1">
-            <Link to="/" className={navLinkClass('/')} onClick={closeMobileMenu}>
+            <Link to="/" {...navLinkProps('/')} onClick={closeMobileMenu}>
               Dashboard
             </Link>
-            <Link to="/competitions" className={navLinkClass('/competitions')} onClick={closeMobileMenu}>
+            <Link to="/competitions" {...navLinkProps('/competitions')} onClick={closeMobileMenu}>
               Competitions
             </Link>
             {user?.role === 'global_admin' && (

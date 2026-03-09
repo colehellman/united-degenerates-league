@@ -21,6 +21,8 @@ body {
   .btn {
     @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
     @apply min-h-[48px] md:min-h-[40px];
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1 focus-visible:outline-none;
   }
 
   .btn-primary {

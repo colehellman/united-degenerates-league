@@ -1,9 +1,16 @@
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import api from '../services/api'
+import Spinner from '../components/Spinner'
 
 export default function Competitions() {
-  const { data: competitions, isLoading } = useQuery({
+  useEffect(() => {
+    document.title = 'Browse Competitions | UDL'
+    return () => { document.title = 'United Degenerates League' }
+  }, [])
+
+  const { data: competitions, isLoading, isError } = useQuery({
     queryKey: ['all-competitions'],
     queryFn: async () => {
       const response = await api.get('/competitions')
@@ -12,7 +19,16 @@ export default function Competitions() {
   })
 
   if (isLoading) {
-    return <div className="text-center py-8">Loading competitions...</div>
+    return <Spinner />
+  }
+
+  if (isError) {
+    return (
+      <div className="card text-center py-12">
+        <p className="text-red-600 font-medium">Failed to load competitions.</p>
+        <p className="text-gray-500 text-sm mt-2">Check your connection and try refreshing.</p>
+      </div>
+    )
   }
 
   return (
@@ -43,7 +59,7 @@ export default function Competitions() {
                 </span>
               </div>
 
-              <p className="text-sm text-gray-600 mb-2 capitalize">{comp.mode.replace('_', ' ')}</p>
+              <p className="text-sm text-gray-600 mb-2 capitalize">{comp.mode.replace(/_/g, ' ')}</p>
 
               <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
                 <span>{comp.participant_count} participants</span>

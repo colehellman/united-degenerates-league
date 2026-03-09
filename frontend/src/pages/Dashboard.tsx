@@ -1,9 +1,16 @@
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import api from '../services/api'
+import Spinner from '../components/Spinner'
 
 export default function Dashboard() {
-  const { data: competitions, isLoading } = useQuery({
+  useEffect(() => {
+    document.title = 'Dashboard | UDL'
+    return () => { document.title = 'United Degenerates League' }
+  }, [])
+
+  const { data: competitions, isLoading, isError } = useQuery({
     queryKey: ['competitions'],
     queryFn: async () => {
       const response = await api.get('/competitions')
@@ -12,7 +19,16 @@ export default function Dashboard() {
   })
 
   if (isLoading) {
-    return <div className="text-center py-8">Loading...</div>
+    return <Spinner />
+  }
+
+  if (isError) {
+    return (
+      <div className="card text-center py-12">
+        <p className="text-red-600 font-medium">Failed to load competitions.</p>
+        <p className="text-gray-500 text-sm mt-2">Check your connection and try refreshing.</p>
+      </div>
+    )
   }
 
   const activeCompetitions = competitions?.filter((c: any) => c.status === 'active') || []
@@ -20,7 +36,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-3">
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <div className="flex gap-3">
           <Link to="/competitions/create" className="btn btn-primary">
@@ -60,7 +76,7 @@ export default function Dashboard() {
                   <h3 className="text-lg font-semibold">{comp.name}</h3>
                   <span className="badge badge-in-progress">Active</span>
                 </div>
-                <p className="text-sm text-gray-600 mb-2">{comp.mode}</p>
+                <p className="text-sm text-gray-600 mb-2 capitalize">{comp.mode.replace(/_/g, ' ')}</p>
                 <p className="text-sm text-gray-500">
                   {comp.participant_count} participants
                 </p>
@@ -84,7 +100,7 @@ export default function Dashboard() {
                   <h3 className="text-lg font-semibold">{comp.name}</h3>
                   <span className="badge badge-open">Upcoming</span>
                 </div>
-                <p className="text-sm text-gray-600 mb-2">{comp.mode}</p>
+                <p className="text-sm text-gray-600 mb-2 capitalize">{comp.mode.replace(/_/g, ' ')}</p>
                 <p className="text-sm text-gray-500">
                   {comp.participant_count} participants
                 </p>

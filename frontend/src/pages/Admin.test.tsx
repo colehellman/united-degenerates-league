@@ -90,13 +90,14 @@ function renderAdmin(role = 'global_admin') {
 /**
  * Render with fine-grained control over each tab's response.
  * Pass `'loading'` to return a never-resolving promise (simulates in-flight request).
+ * Pass `'error'` to simulate a rejected fetch.
  */
 function renderAdminWith({
   bugReports,
   auditLogs,
 }: {
-  bugReports?: any[] | 'loading'
-  auditLogs?: any[] | 'loading'
+  bugReports?: any[] | 'loading' | 'error'
+  auditLogs?: any[] | 'loading' | 'error'
 } = {}) {
   vi.mocked(useAuthStore).mockReturnValue({
     user: { id: '1', username: 'admin', email: 'a@b.com', role: 'global_admin', status: 'active' },
@@ -104,14 +105,14 @@ function renderAdminWith({
 
   vi.mocked(api.get).mockImplementation((url: string) => {
     if (url === '/bug-reports') {
-      return bugReports === 'loading'
-        ? new Promise(() => {})
-        : Promise.resolve({ data: bugReports ?? [SAMPLE_REPORT] })
+      if (bugReports === 'loading') return new Promise(() => {})
+      if (bugReports === 'error') return Promise.reject(new Error('Network error'))
+      return Promise.resolve({ data: bugReports ?? [SAMPLE_REPORT] })
     }
     if (url === '/admin/audit-logs') {
-      return auditLogs === 'loading'
-        ? new Promise(() => {})
-        : Promise.resolve({ data: auditLogs ?? [SAMPLE_LOG] })
+      if (auditLogs === 'loading') return new Promise(() => {})
+      if (auditLogs === 'error') return Promise.reject(new Error('Network error'))
+      return Promise.resolve({ data: auditLogs ?? [SAMPLE_LOG] })
     }
     return Promise.resolve({ data: [] })
   })
@@ -180,15 +181,21 @@ describe('Admin — bug report status badge', () => {
 // Bug reports — loading & empty states
 // ---------------------------------------------------------------------------
 
-describe('Admin — bug reports loading and empty states', () => {
-  it('shows loading indicator while bug reports are fetching', () => {
+describe('Admin — bug reports loading, empty, and error states', () => {
+  it('shows spinner while bug reports are fetching', () => {
     renderAdminWith({ bugReports: 'loading' })
-    expect(screen.getByText(/loading bug reports/i)).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
   })
 
   it('shows empty-state message when there are no bug reports', async () => {
     renderAdminWith({ bugReports: [] })
     await screen.findByText(/no bug reports submitted yet/i)
+  })
+
+  it('shows error state instead of empty state when bug reports fetch fails', async () => {
+    renderAdminWith({ bugReports: 'error' })
+    await screen.findByText(/failed to load bug reports/i)
+    expect(screen.queryByText(/no bug reports submitted yet/i)).not.toBeInTheDocument()
   })
 })
 
@@ -238,18 +245,24 @@ describe('Admin — status update mutation', () => {
 // Audit logs — loading & empty states
 // ---------------------------------------------------------------------------
 
-describe('Admin — audit logs loading and empty states', () => {
-  it('shows loading indicator while audit logs are fetching', () => {
-    // Bug reports load normally; audit logs hang
+describe('Admin — audit logs loading, empty, and error states', () => {
+  it('shows spinner while audit logs are fetching', () => {
     renderAdminWith({ auditLogs: 'loading' })
     fireEvent.click(screen.getByRole('button', { name: /audit logs/i }))
-    expect(screen.getByText(/loading audit logs/i)).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
   })
 
   it('shows empty-state message when there are no audit logs', async () => {
     renderAdminWith({ auditLogs: [] })
     fireEvent.click(screen.getByRole('button', { name: /audit logs/i }))
     await screen.findByText(/no audit log entries yet/i)
+  })
+
+  it('shows error state instead of empty state when audit logs fetch fails', async () => {
+    renderAdminWith({ auditLogs: 'error' })
+    fireEvent.click(screen.getByRole('button', { name: /audit logs/i }))
+    await screen.findByText(/failed to load audit logs/i)
+    expect(screen.queryByText(/no audit log entries yet/i)).not.toBeInTheDocument()
   })
 })
 

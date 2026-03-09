@@ -82,6 +82,58 @@ describe('Layout — logout', () => {
   })
 })
 
+describe('Layout — mobile menu aria-expanded', () => {
+  it('hamburger starts with aria-expanded="false"', () => {
+    renderLayout()
+    const hamburger = screen.getByRole('button', { name: /toggle menu/i })
+    expect(hamburger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('hamburger sets aria-expanded="true" after click', () => {
+    renderLayout()
+    const hamburger = screen.getByRole('button', { name: /toggle menu/i })
+    fireEvent.click(hamburger)
+    expect(hamburger).toHaveAttribute('aria-expanded', 'true')
+  })
+})
+
+describe('Layout — active nav link on sub-routes', () => {
+  it('marks Competitions link as current page when on a sub-route', () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/competitions/abc-123']}>
+          <Layout />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    // Both desktop and mobile links rendered; find by aria-current
+    const currentLinks = screen.getAllByRole('link', { name: /competitions/i }).filter(
+      (el) => el.getAttribute('aria-current') === 'page',
+    )
+    expect(currentLinks.length).toBeGreaterThan(0)
+  })
+
+  it('does not mark Dashboard as current when navigated to a sub-route', () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/competitions/abc-123']}>
+          <Layout />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    const dashLinks = screen.getAllByRole('link', { name: /dashboard/i })
+    dashLinks.forEach((link) => {
+      expect(link).not.toHaveAttribute('aria-current', 'page')
+    })
+  })
+})
+
 describe('Layout — bug report modal', () => {
   it('opens the modal when Report a Bug is clicked', () => {
     renderLayout()

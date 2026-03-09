@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api from '../services/api'
 
@@ -29,6 +29,7 @@ export default function CompetitionDetail() {
   const [picks, setPicks] = useState<Record<string, string>>({}) // game_id -> team_id
   const [fixedSelections, setFixedSelections] = useState<string[]>([]) // team_ids or golfer_ids
   const [error, setError] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const { data: competition, isLoading: compLoading } = useQuery({
     queryKey: ['competition', id],
@@ -132,6 +133,7 @@ export default function CompetitionDetail() {
       queryClient.invalidateQueries({ queryKey: ['user-picks', id] })
       queryClient.invalidateQueries({ queryKey: ['leaderboard', id] })
       setError('')
+      toast.success('Picks saved!')
     },
     onError: (err: any) => {
       setError(err.response?.data?.detail || 'Failed to submit picks')
@@ -148,6 +150,7 @@ export default function CompetitionDetail() {
       queryClient.invalidateQueries({ queryKey: ['user-fixed-selections', id] })
       queryClient.invalidateQueries({ queryKey: ['available-selections', id] })
       setError('')
+      toast.success('Selections saved!')
     },
     onError: (err: any) => {
       setError(err.response?.data?.detail || 'Failed to submit selections')
@@ -368,12 +371,27 @@ export default function CompetitionDetail() {
     return competition?.max_picks_per_day || 'unlimited'
   }
 
+  // Set document title once competition data arrives
+  useEffect(() => {
+    if (competition?.name) {
+      document.title = `${competition.name} | UDL`
+      return () => { document.title = 'United Degenerates League' }
+    }
+  }, [competition?.name])
+
   if (compLoading) {
     return <div className="text-center py-8">Loading...</div>
   }
 
   if (!competition) {
-    return <div className="card">Competition not found</div>
+    return (
+      <div className="card text-center py-12">
+        <p className="text-gray-700 font-medium mb-4">Competition not found</p>
+        <Link to="/competitions" className="btn btn-secondary text-sm">
+          ← Back to competitions
+        </Link>
+      </div>
+    )
   }
 
   return (
@@ -455,17 +473,32 @@ export default function CompetitionDetail() {
             >
               {forceSyncMutation.isPending ? 'Syncing…' : '🔄 Force Game Sync'}
             </button>
-            <button
-              onClick={() => {
-                if (window.confirm(`Delete "${competition.name}"? This cannot be undone.`)) {
-                  deleteCompetitionMutation.mutate()
-                }
-              }}
-              disabled={deleteCompetitionMutation.isPending}
-              className="btn text-sm bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-            >
-              {deleteCompetitionMutation.isPending ? 'Deleting…' : '🗑️ Delete Competition'}
-            </button>
+            {showDeleteConfirm ? (
+              <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">Delete "{competition.name}"? This cannot be undone.</p>
+                <button
+                  onClick={() => { deleteCompetitionMutation.mutate(); setShowDeleteConfirm(false) }}
+                  disabled={deleteCompetitionMutation.isPending}
+                  className="btn text-sm bg-red-600 text-white hover:bg-red-700 whitespace-nowrap"
+                >
+                  Confirm Delete
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="btn btn-secondary text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={deleteCompetitionMutation.isPending}
+                className="btn text-sm bg-red-600 text-white hover:bg-red-700"
+              >
+                🗑️ Delete Competition
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -610,7 +643,15 @@ export default function CompetitionDetail() {
                               <div className="grid grid-cols-2 gap-3">
                                 {/* Away Team — div instead of label+radio so clicking a selected team deselects it */}
                                 <div
+                                  role="button"
+                                  tabIndex={locked ? undefined : 0}
                                   onClick={() => !locked && handlePickChange(game.id, game.away_team.id)}
+                                  onKeyDown={(e) => {
+                                    if (!locked && (e.key === 'Enter' || e.key === ' ')) {
+                                      e.preventDefault()
+                                      handlePickChange(game.id, game.away_team.id)
+                                    }
+                                  }}
                                   className={`border rounded-lg p-3 transition select-none ${teamCardClass(game.away_team.id)}`}
                                 >
                                   <div className="font-semibold text-sm">{game.away_team.city}</div>
@@ -622,7 +663,15 @@ export default function CompetitionDetail() {
 
                                 {/* Home Team */}
                                 <div
+                                  role="button"
+                                  tabIndex={locked ? undefined : 0}
                                   onClick={() => !locked && handlePickChange(game.id, game.home_team.id)}
+                                  onKeyDown={(e) => {
+                                    if (!locked && (e.key === 'Enter' || e.key === ' ')) {
+                                      e.preventDefault()
+                                      handlePickChange(game.id, game.home_team.id)
+                                    }
+                                  }}
                                   className={`border rounded-lg p-3 transition select-none ${teamCardClass(game.home_team.id)}`}
                                 >
                                   <div className="text-xs text-gray-500 font-medium">HOME</div>
