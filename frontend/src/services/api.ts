@@ -20,7 +20,13 @@ export const api = axios.create({
 // Extend axios config to support per-request toast suppression.
 // Callers that handle their own error UI pass _skipToast: true to avoid
 // double-toasting (e.g. inline form validation messages).
+// Both interfaces must be augmented: AxiosRequestConfig is what callers pass
+// to api.get/post; InternalAxiosRequestConfig is what interceptors receive.
 declare module 'axios' {
+  interface AxiosRequestConfig {
+    _skipToast?: boolean
+    _retry?: boolean
+  }
   interface InternalAxiosRequestConfig {
     _skipToast?: boolean
     _retry?: boolean
@@ -129,7 +135,20 @@ api.interceptors.response.use(
         // the sessionStorage token in the request body as a fallback; the
         // backend prefers body over cookie when both are present.
         const storedRefreshToken = sessionStorage.getItem(RT_KEY) || undefined
-        const res = await api.post('/auth/refresh', storedRefreshToken ? { refresh_token: storedRefreshToken } : {})
+        const res = await api.post(
+          '/auth/refresh',
+          storedRefreshToken ? { refresh_token: storedRefreshToken } : {},
+          {
+            // Render free-tier cold starts take 30-60s — well above the global
+            // 15s timeout.  Override here so a valid sessionStorage refresh token
+            // isn't abandoned mid-wake and the user is forced to re-login.
+            timeout: 60000,
+            // Refresh failures are handled via redirect logic below; suppress the
+            // generic "An unexpected error occurred" toast so it doesn't fire on
+            // every cold-start page load before the backend is warm.
+            _skipToast: true,
+          },
+        )
         setAccessToken(res.data.access_token)
         // Rotate the stored refresh token so the next page reload can still
         // issue a fresh access token without re-login.
