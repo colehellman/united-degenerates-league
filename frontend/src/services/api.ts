@@ -11,6 +11,10 @@ export const api = axios.create({
   },
   // Send httpOnly cookies on every request
   withCredentials: true,
+  // 15s timeout prevents cold-start hangs (Render free tier wakes in ~30-60s on
+  // first hit, but we'd rather fail fast than leave stale refresh requests
+  // in-flight while the user fills in the login form).
+  timeout: 15000,
 })
 
 // Extend axios config to support per-request toast suppression.
@@ -26,6 +30,17 @@ declare module 'axios' {
 // Track whether a refresh is already in-flight to avoid infinite loops
 let isRefreshing = false
 let refreshSubscribers: ((token: string) => void)[] = []
+
+// Single-shot flag: set by authStore.login/register so that when a background
+// checkAuth refresh fails AFTER a successful login (race condition), we don't
+// hard-redirect the user back to /login.  Consumed immediately after read.
+// Most visible on mobile/slow networks where the cold-start wake-up means the
+// refresh request is still in-flight for 15+ seconds while the user logs in.
+let _suppressNextRefreshRedirect = false
+
+export function suppressRefreshRedirect(): void {
+  _suppressNextRefreshRedirect = true
+}
 
 function onTokenRefreshed(token: string) {
   refreshSubscribers.forEach((cb) => cb(token))
@@ -85,7 +100,16 @@ api.interceptors.response.use(
         // React Router's <Navigate> handles the redirect client-side.
         // Using window.location on /login or /register causes a full-page reload
         // loop: /login loads → checkAuth → 401 → refresh → 401 → redirect → repeat.
+        //
+        // _suppressNextRefreshRedirect handles the race condition where login()
+        // succeeds and navigate('/') fires while a checkAuth-triggered refresh is
+        // still in-flight.  Without this guard the stale refresh failure would
+        // kick the freshly-logged-in user back to /login.  Most visible on mobile
+        // networks and after Render cold-starts.
+        const shouldRedirect = !_suppressNextRefreshRedirect
+        _suppressNextRefreshRedirect = false // consume the one-shot flag
         if (
+          shouldRedirect &&
           window.location.pathname !== '/login' &&
           window.location.pathname !== '/register'
         ) {

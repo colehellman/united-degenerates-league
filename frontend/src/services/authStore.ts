@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import api from './api'
+import api, { suppressRefreshRedirect } from './api'
 
 interface User {
   id: string
@@ -29,11 +29,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email, password) => {
     const response = await api.post('/auth/login', { email, password })
     // Tokens are set as httpOnly cookies by the backend.
+    // Suppress any redirect that a concurrent checkAuth refresh might trigger —
+    // if checkAuth was in-flight when login succeeded, its refresh failure would
+    // otherwise hard-redirect the freshly-logged-in user back to /login.
+    suppressRefreshRedirect()
     set({ user: response.data.user, isAuthenticated: true, isInitializing: false })
   },
 
   register: async (email, username, password) => {
     const response = await api.post('/auth/register', { email, username, password })
+    suppressRefreshRedirect()
     set({ user: response.data.user, isAuthenticated: true, isInitializing: false })
   },
 

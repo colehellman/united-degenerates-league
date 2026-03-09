@@ -45,9 +45,14 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
 
 
 def _clear_auth_cookies(response: Response):
-    """Clear auth cookies on logout."""
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("refresh_token", path="/")
+    """Clear auth cookies on logout.
+
+    Must pass the same samesite/secure attributes used at set-time — browsers
+    match cookies by name + path + domain + samesite + secure.  Without these,
+    the deletion Set-Cookie targets a *different* cookie and is silently ignored.
+    """
+    response.delete_cookie("access_token", **_cookie_kwargs)
+    response.delete_cookie("refresh_token", **_cookie_kwargs)
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
