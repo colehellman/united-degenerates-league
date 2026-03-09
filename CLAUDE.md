@@ -9,10 +9,19 @@ Sports prediction platform. FastAPI backend, React/TypeScript frontend, PostgreS
 docker-compose up --build
 docker-compose exec backend alembic upgrade head
 
-# Manual
-cd backend && pip install -r requirements.txt && uvicorn app.main:app --reload
+# Manual — backend (Python 3.11 required, matches Dockerfile)
+cd backend
+python3.11 -m venv .venv          # one-time setup
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+
+# Manual — frontend
 cd frontend && npm install && npm run dev
 ```
+
+> **Python version**: The backend targets **Python 3.11** (same as the Docker image).
+> Always activate `.venv` before running any backend commands locally.
 
 - Frontend: http://localhost:3000
 - Backend: http://localhost:8000
@@ -61,17 +70,17 @@ frontend/
 
 ```bash
 # Backend tests (requires Postgres + Redis running)
-cd backend && pytest tests/ -v --tb=short
+cd backend && source .venv/bin/activate && pytest tests/ -v --tb=short
 
 # Frontend
 cd frontend && npm run lint && npm run build
 
 # Database migrations
-cd backend && alembic upgrade head
-cd backend && alembic revision --autogenerate -m "description"
+cd backend && source .venv/bin/activate && alembic upgrade head
+cd backend && source .venv/bin/activate && alembic revision --autogenerate -m "description"
 
 # Standalone worker (production only)
-cd backend && python worker.py
+cd backend && source .venv/bin/activate && python worker.py
 ```
 
 ## Architecture Notes
