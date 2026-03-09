@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import api, { suppressRefreshRedirect } from './api'
+import api, { suppressRefreshRedirect, setAccessToken } from './api'
 
 interface User {
   id: string
@@ -28,7 +28,10 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   login: async (email, password) => {
     const response = await api.post('/auth/login', { email, password })
-    // Tokens are set as httpOnly cookies by the backend.
+    // Store token in memory so the request interceptor can send it as a Bearer
+    // header. This bypasses cross-origin cookie restrictions (mobile Safari ITP
+    // blocks SameSite=None cookies from onrender.com subdomains).
+    setAccessToken(response.data.access_token)
     // Suppress any redirect that a concurrent checkAuth refresh might trigger —
     // if checkAuth was in-flight when login succeeded, its refresh failure would
     // otherwise hard-redirect the freshly-logged-in user back to /login.
@@ -38,6 +41,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   register: async (email, username, password) => {
     const response = await api.post('/auth/register', { email, username, password })
+    setAccessToken(response.data.access_token)
     suppressRefreshRedirect()
     set({ user: response.data.user, isAuthenticated: true, isInitializing: false })
   },
@@ -48,6 +52,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       // Best-effort — even if the call fails, clear local state
     }
+    setAccessToken(null)
     set({ user: null, isAuthenticated: false })
   },
 

@@ -42,6 +42,25 @@ export function suppressRefreshRedirect(): void {
   _suppressNextRefreshRedirect = true
 }
 
+// In-memory access token. Injected as Authorization: Bearer on every request
+// so the app works regardless of cross-origin cookie restrictions (mobile Safari
+// ITP blocks SameSite=None cookies from onrender.com subdomains).  Storing it
+// in memory (not localStorage) means XSS cannot exfiltrate it, and it is
+// cleared on page reload — the httpOnly refresh cookie then issues a new one.
+let _accessToken: string | null = null
+
+export function setAccessToken(token: string | null): void {
+  _accessToken = token
+}
+
+// Inject Bearer token on every outbound request when we have one in memory.
+api.interceptors.request.use((config) => {
+  if (_accessToken) {
+    config.headers.Authorization = `Bearer ${_accessToken}`
+  }
+  return config
+})
+
 function onTokenRefreshed(token: string) {
   refreshSubscribers.forEach((cb) => cb(token))
   refreshSubscribers = []
@@ -89,15 +108,20 @@ api.interceptors.response.use(
       isRefreshing = true
 
       try {
-        // Attempt refresh — cookie is sent automatically
+        // Attempt refresh — httpOnly refresh cookie sent automatically.
+        // Also update the in-memory token so Bearer auth stays current.
         const res = await api.post('/auth/refresh')
+        setAccessToken(res.data.access_token)
         onTokenRefreshed(res.data.access_token)
         return api(originalRequest)
       } catch (refreshError) {
-        // Refresh failed. Only hard-redirect to /login for mid-session expiry
-        // (user is on a protected page). For the initial auth check, let the
-        // error propagate so checkAuth()'s catch sets isInitializing=false and
-        // React Router's <Navigate> handles the redirect client-side.
+        // Refresh failed — clear in-memory token so we don't keep sending a
+        // stale Bearer header on future requests.
+        setAccessToken(null)
+        // Only hard-redirect to /login for mid-session expiry (user is on a
+        // protected page). For the initial auth check, let the error propagate
+        // so checkAuth()'s catch sets isInitializing=false and React Router's
+        // <Navigate> handles the redirect client-side.
         // Using window.location on /login or /register causes a full-page reload
         // loop: /login loads → checkAuth → 401 → refresh → 401 → redirect → repeat.
         //
