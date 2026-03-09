@@ -49,7 +49,16 @@ api.interceptors.response.use(
       toast.error(error.response?.data?.detail || 'An unexpected error occurred')
     }
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Skip the auto-refresh cycle when the failing request IS the refresh
+    // endpoint. Without this guard, the refresh request also gets a 401,
+    // re-enters the interceptor, sees isRefreshing=true, and queues itself
+    // as a subscriber that never resolves — deadlocking the entire auth flow
+    // and leaving isInitializing=true (perpetual loading screen) forever.
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      originalRequest.url !== '/auth/refresh'
+    ) {
       if (isRefreshing) {
         // Queue this request until the refresh completes
         return new Promise((resolve) => {
@@ -68,9 +77,18 @@ api.interceptors.response.use(
         onTokenRefreshed(res.data.access_token)
         return api(originalRequest)
       } catch (refreshError) {
-        // Refresh failed — redirect to login. Tokens are httpOnly cookies;
-        // there is no localStorage entry to remove.
-        window.location.href = '/login'
+        // Refresh failed. Only hard-redirect to /login for mid-session expiry
+        // (user is on a protected page). For the initial auth check, let the
+        // error propagate so checkAuth()'s catch sets isInitializing=false and
+        // React Router's <Navigate> handles the redirect client-side.
+        // Using window.location on /login or /register causes a full-page reload
+        // loop: /login loads → checkAuth → 401 → refresh → 401 → redirect → repeat.
+        if (
+          window.location.pathname !== '/login' &&
+          window.location.pathname !== '/register'
+        ) {
+          window.location.href = '/login'
+        }
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false
