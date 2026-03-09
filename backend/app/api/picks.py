@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
-from typing import List, Optional
+from sqlalchemy.orm import joinedload
+from typing import Dict, List, Optional
 from datetime import datetime
 
 from app.core.deps import get_db, get_current_user
@@ -27,10 +28,21 @@ router = APIRouter()
 async def create_daily_picks_batch(
     competition_id: str,
     pick_data: PickBatchCreate,
+    date: Optional[str] = Query(None, description="Local date (YYYY-MM-DD) to scope pick replacement"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create daily picks for multiple games"""
+    """Create or update daily picks for multiple games.
+
+    Uses replace semantics within the date window: picks for unstarted games
+    that are absent from the batch are deleted (the user de-selected them).
+    Picks for games that have already started are immutable and stay in the DB.
+
+    The max_picks_per_day limit is enforced against the post-operation total
+    (immutable started-game picks + incoming batch), not the naive
+    existing_count + batch_size sum.  This allows re-submitting picks to
+    change a winner or swap an unstarted game without hitting a false limit.
+    """
     # Verify competition exists and is Daily Picks mode
     comp_result = await db.execute(
         select(Competition).where(Competition.id == competition_id)
@@ -59,30 +71,68 @@ async def create_daily_picks_batch(
             detail="You are not a participant in this competition",
         )
 
-    if competition.max_picks_per_day is not None:
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        today_end = datetime.utcnow().replace(hour=23, minute=59, second=59, microsecond=999999)
-        user_picks_today_count_result = await db.execute(
-            select(func.count(Pick.id)).where(
-                and_(
-                    Pick.user_id == current_user.id,
-                    Pick.competition_id == competition.id,
-                    Pick.created_at >= today_start,
-                    Pick.created_at <= today_end,
-                )
+    now = datetime.utcnow()
+
+    # Determine the date window for scoping existing picks.
+    # The frontend passes the local date (YYYY-MM-DD) the user is viewing;
+    # we scope by pick.created_at to match the GET endpoint's behaviour.
+    if date:
+        try:
+            date_obj = datetime.strptime(date, "%Y-%m-%d")
+            day_start = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = date_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
+        except ValueError:
+            day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+    else:
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    # Load existing picks for the date window with their games eagerly loaded
+    # so we can inspect scheduled_start_time without extra round-trips.
+    existing_result = await db.execute(
+        select(Pick)
+        .options(joinedload(Pick.game))
+        .where(
+            and_(
+                Pick.user_id == current_user.id,
+                Pick.competition_id == competition.id,
+                Pick.created_at >= day_start,
+                Pick.created_at <= day_end,
             )
         )
-        current_picks_count = user_picks_today_count_result.scalar_one()
+    )
+    existing_by_game: Dict[str, Pick] = {
+        str(p.game_id): p for p in existing_result.scalars().all()
+    }
 
-        if (current_picks_count + len(pick_data.picks)) > competition.max_picks_per_day:
+    submitted_game_ids = {str(p.game_id) for p in pick_data.picks}
+
+    # Replace semantics: remove picks for unstarted games the user de-selected.
+    # Picks for games that have already started are immutable — count them toward
+    # the daily cap but do not delete them.
+    locked_not_in_batch = 0
+    for game_id, existing_pick in list(existing_by_game.items()):
+        if game_id in submitted_game_ids:
+            continue  # Will be upserted below — leave in place
+        if existing_pick.game and now < existing_pick.game.scheduled_start_time:
+            # Game not yet started and not in batch → user intentionally removed it
+            await db.delete(existing_pick)
+        else:
+            # Game has started → pick is locked/immutable; still counts toward limit
+            locked_not_in_batch += 1
+
+    # Limit check using post-operation totals.
+    # Old logic: current_count + batch_size (counts updates as new — always wrong on re-submit).
+    # New logic: locked_immutable + batch_size (the actual pick count after this operation).
+    if competition.max_picks_per_day is not None:
+        if (locked_not_in_batch + len(pick_data.picks)) > competition.max_picks_per_day:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Daily pick limit ({competition.max_picks_per_day}) exceeded.",
             )
 
-
     created_picks = []
-    now = datetime.utcnow()
 
     # Process each pick in the batch
     for pick_item in pick_data.picks:
@@ -105,20 +155,10 @@ async def create_daily_picks_batch(
                 detail=f"Game {game.id} has already started - picks are locked",
             )
 
-        # Check if pick already exists
-        existing_pick_result = await db.execute(
-            select(Pick).where(
-                and_(
-                    Pick.user_id == current_user.id,
-                    Pick.competition_id == competition.id,
-                    Pick.game_id == game.id,
-                )
-            )
-        )
-        existing_pick = existing_pick_result.scalar_one_or_none()
+        existing_pick = existing_by_game.get(str(pick_item.game_id))
 
         if existing_pick:
-            # Update existing pick
+            # Update existing pick (winner change)
             existing_pick.predicted_winner_team_id = pick_item.predicted_winner_team_id
             existing_pick.updated_at = now
             created_picks.append(existing_pick)
@@ -127,7 +167,7 @@ async def create_daily_picks_batch(
             pick = Pick(
                 user_id=current_user.id,
                 competition_id=competition.id,
-                game_id=game.id,
+                game_id=pick_item.game_id,
                 predicted_winner_team_id=pick_item.predicted_winner_team_id,
             )
             db.add(pick)

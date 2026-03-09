@@ -119,7 +119,13 @@ export default function CompetitionDetail() {
   // Submit daily picks mutation
   const submitPicksMutation = useMutation({
     mutationFn: async (picksData: Pick[]) => {
-      const response = await api.post(`/picks/${id}/daily`, { picks: picksData })
+      // Pass the selected date so the backend can scope its replace semantics
+      // to the correct day window (delete de-selected picks, fix limit check).
+      const response = await api.post(
+        `/picks/${id}/daily`,
+        { picks: picksData },
+        { params: { date: selectedDate } },
+      )
       return response.data
     },
     onSuccess: () => {
@@ -221,10 +227,27 @@ export default function CompetitionDetail() {
   // forceSyncMutation covers .isPending and .mutate — no need to list properties separately.
   }, [competition?.user_is_admin, gamesLoading, games, forceSyncMutation])
 
+  // True once the user has at least one persisted pick for the selected date.
+  // Used to enable post-submission editing rules.
+  const hasSubmittedPicks = !!(userPicks && userPicks.length > 0)
+
   const handlePickChange = (gameId: string, teamId: string) => {
     setPicks((prev) => {
       // Toggle off: clicking the already-selected team deselects it
       if (prev[gameId] === teamId) {
+        // After submission, prevent de-selecting the only remaining unstarted game.
+        // If there are no other unstarted games the user could swap to, un-picking
+        // would leave them with no valid replacement and is likely a mis-click.
+        // They can still switch the winner by clicking the other team.
+        if (hasSubmittedPicks) {
+          const otherUnstarted = (games || []).filter(
+            (g: any) => g.id !== gameId && !isGameLocked(g),
+          )
+          if (otherUnstarted.length === 0) {
+            return prev // block toggle-off; winner switch still works
+          }
+        }
+
         const next = { ...prev }
         delete next[gameId]
         setError('')
@@ -236,7 +259,7 @@ export default function CompetitionDetail() {
       const maxPicks = competition?.max_picks_per_day
       if (isNewGame && maxPicks && Object.keys(prev).length >= maxPicks) {
         setError(
-          `Competition rules only allow ${maxPicks} pick${maxPicks !== 1 ? 's' : ''} per day`
+          `Competition rules only allow ${maxPicks} pick${maxPicks !== 1 ? 's' : ''} per day`,
         )
         return prev // no state change
       }
@@ -621,9 +644,14 @@ export default function CompetitionDetail() {
                         })}
                       </div>
 
-                      {/* Submit Button — only shown while games are still open */}
+                      {/* Submit / Update button — shown while any game is still open */}
                       {!allLocked && (
                         <div className="sticky bottom-0 bg-white border-t pt-4 -mx-4 px-4 md:-mx-6 md:px-6 -mb-6 pb-6">
+                          {hasSubmittedPicks && (
+                            <p className="text-xs text-gray-500 text-center mb-2">
+                              ✏️ Picks are editable until each game starts
+                            </p>
+                          )}
                           <button
                             onClick={handleSubmitPicks}
                             disabled={submitPicksMutation.isPending || getPicksCount() === 0}
@@ -631,6 +659,8 @@ export default function CompetitionDetail() {
                           >
                             {submitPicksMutation.isPending
                               ? 'Submitting...'
+                              : hasSubmittedPicks
+                              ? `Update ${getPicksCount()} Pick${getPicksCount() !== 1 ? 's' : ''}`
                               : `Submit ${getPicksCount()} Pick${getPicksCount() !== 1 ? 's' : ''}`}
                           </button>
                         </div>
