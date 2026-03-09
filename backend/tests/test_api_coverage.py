@@ -111,6 +111,19 @@ async def test_update_username(client: AsyncClient, test_user: User):
 
 
 @pytest.mark.asyncio
+async def test_dismiss_onboarding(client: AsyncClient, test_user: User):
+    """PATCH /users/me with has_dismissed_onboarding covers the branch on line 32 (users.py)."""
+    token = await _login(client)
+    resp = await client.patch(
+        "/api/users/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"has_dismissed_onboarding": True},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["has_dismissed_onboarding"] is True
+
+
+@pytest.mark.asyncio
 async def test_change_password(client: AsyncClient, test_user: User):
     """POST /users/me/change-password with correct current password."""
     token = await _login(client)
@@ -784,3 +797,297 @@ async def test_change_password_new_no_digit(client: AsyncClient, test_user: User
         json={"current_password": "Password123", "new_password": "Abcdefgh"},
     )
     assert resp.status_code == 422
+
+
+# ── Pick editing after submission ─────────────────────────────────────
+# Verifies that re-submitting picks to change a winner or swap a game does
+# not trigger the daily limit when the competition has max_picks_per_day set.
+
+
+@pytest.mark.asyncio
+async def test_update_picks_winner_at_max_limit(
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    test_teams: list[Team],
+    participant: Participant,
+    db_session: AsyncSession,
+):
+    """Changing the winner of an already-submitted pick must not hit the daily limit.
+
+    The old code used (existing_count + batch_size) which always exceeded the cap
+    on re-submit.  The new logic counts only (locked_started_picks + batch_size).
+    """
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    # cap at 2 picks per day
+    active_competition.max_picks_per_day = 2
+    await db_session.commit()
+
+    game1 = Game(
+        competition_id=active_competition.id,
+        external_id="pick_edit_g1",
+        home_team_id=test_teams[0].id,
+        away_team_id=test_teams[1].id,
+        scheduled_start_time=datetime.utcnow() + timedelta(hours=3),
+        status=GameStatus.SCHEDULED,
+        venue_name="Arena", venue_city="City",
+    )
+    game2 = Game(
+        competition_id=active_competition.id,
+        external_id="pick_edit_g2",
+        home_team_id=test_teams[0].id,
+        away_team_id=test_teams[1].id,
+        scheduled_start_time=datetime.utcnow() + timedelta(hours=5),
+        status=GameStatus.SCHEDULED,
+        venue_name="Arena", venue_city="City",
+    )
+    db_session.add_all([game1, game2])
+    await db_session.commit()
+    await db_session.refresh(game1)
+    await db_session.refresh(game2)
+
+    token = await _login(client)
+    date_str = today.strftime("%Y-%m-%d")
+
+    # Initial submission — both games, 2 picks (at the daily limit)
+    r1 = await client.post(
+        f"/api/picks/{active_competition.id}/daily",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"date": date_str},
+        json={
+            "picks": [
+                {"game_id": str(game1.id), "predicted_winner_team_id": str(test_teams[0].id)},
+                {"game_id": str(game2.id), "predicted_winner_team_id": str(test_teams[0].id)},
+            ]
+        },
+    )
+    assert r1.status_code == 201
+
+    # Switch winner on game1 — same 2 games, different prediction for game1
+    r2 = await client.post(
+        f"/api/picks/{active_competition.id}/daily",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"date": date_str},
+        json={
+            "picks": [
+                {"game_id": str(game1.id), "predicted_winner_team_id": str(test_teams[1].id)},
+                {"game_id": str(game2.id), "predicted_winner_team_id": str(test_teams[0].id)},
+            ]
+        },
+    )
+    assert r2.status_code == 201, r2.text
+    winners = {p["game_id"]: p["predicted_winner_team_id"] for p in r2.json()}
+    assert winners[str(game1.id)] == str(test_teams[1].id)
+
+    # Still exactly 2 picks in DB (no duplicates or ghosts)
+    result = await db_session.execute(
+        select(Pick).where(
+            Pick.user_id == test_user.id,
+            Pick.competition_id == active_competition.id,
+        )
+    )
+    assert len(result.scalars().all()) == 2
+
+
+@pytest.mark.asyncio
+async def test_swap_game_pick_at_max_limit(
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    test_teams: list[Team],
+    participant: Participant,
+    db_session: AsyncSession,
+):
+    """Swapping one picked game for a different game must delete the old pick and create the new one."""
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    active_competition.max_picks_per_day = 2
+    await db_session.commit()
+
+    game1 = Game(
+        competition_id=active_competition.id,
+        external_id="swap_g1",
+        home_team_id=test_teams[0].id,
+        away_team_id=test_teams[1].id,
+        scheduled_start_time=datetime.utcnow() + timedelta(hours=3),
+        status=GameStatus.SCHEDULED,
+        venue_name="Arena", venue_city="City",
+    )
+    game2 = Game(
+        competition_id=active_competition.id,
+        external_id="swap_g2",
+        home_team_id=test_teams[0].id,
+        away_team_id=test_teams[1].id,
+        scheduled_start_time=datetime.utcnow() + timedelta(hours=5),
+        status=GameStatus.SCHEDULED,
+        venue_name="Arena", venue_city="City",
+    )
+    game3 = Game(
+        competition_id=active_competition.id,
+        external_id="swap_g3",
+        home_team_id=test_teams[0].id,
+        away_team_id=test_teams[1].id,
+        scheduled_start_time=datetime.utcnow() + timedelta(hours=7),
+        status=GameStatus.SCHEDULED,
+        venue_name="Arena", venue_city="City",
+    )
+    db_session.add_all([game1, game2, game3])
+    await db_session.commit()
+    for g in (game1, game2, game3):
+        await db_session.refresh(g)
+
+    token = await _login(client)
+    date_str = today.strftime("%Y-%m-%d")
+
+    # Initial picks: game1 + game2
+    await client.post(
+        f"/api/picks/{active_competition.id}/daily",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"date": date_str},
+        json={
+            "picks": [
+                {"game_id": str(game1.id), "predicted_winner_team_id": str(test_teams[0].id)},
+                {"game_id": str(game2.id), "predicted_winner_team_id": str(test_teams[0].id)},
+            ]
+        },
+    )
+
+    # Swap game1 → game3 (keep game2)
+    r = await client.post(
+        f"/api/picks/{active_competition.id}/daily",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"date": date_str},
+        json={
+            "picks": [
+                {"game_id": str(game2.id), "predicted_winner_team_id": str(test_teams[0].id)},
+                {"game_id": str(game3.id), "predicted_winner_team_id": str(test_teams[1].id)},
+            ]
+        },
+    )
+    assert r.status_code == 201, r.text
+
+    # game1 pick must be deleted; only game2 and game3 picks should remain
+    result = await db_session.execute(
+        select(Pick).where(
+            Pick.user_id == test_user.id,
+            Pick.competition_id == active_competition.id,
+        )
+    )
+    remaining = result.scalars().all()
+    remaining_game_ids = {str(p.game_id) for p in remaining}
+    assert str(game1.id) not in remaining_game_ids
+    assert str(game2.id) in remaining_game_ids
+    assert str(game3.id) in remaining_game_ids
+    assert len(remaining) == 2
+
+
+@pytest.mark.asyncio
+async def test_picks_invalid_date_falls_back_to_today(
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    test_teams: list[Team],
+    participant: Participant,
+    db_session: AsyncSession,
+):
+    """Passing an invalid date string falls through to the except ValueError branch
+    and defaults to today's UTC window instead of raising an error.
+    """
+    game = Game(
+        competition_id=active_competition.id,
+        external_id="invalid_date_fallback",
+        home_team_id=test_teams[0].id,
+        away_team_id=test_teams[1].id,
+        scheduled_start_time=datetime.utcnow() + timedelta(hours=3),
+        status=GameStatus.SCHEDULED,
+        venue_name="Arena", venue_city="City",
+    )
+    db_session.add(game)
+    await db_session.commit()
+    await db_session.refresh(game)
+
+    token = await _login(client)
+
+    # "not-a-date" is an invalid date string → triggers except ValueError → falls back
+    # to UTC today window, which is the same day the pick is created → pick succeeds
+    resp = await client.post(
+        f"/api/picks/{active_competition.id}/daily",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"date": "not-a-date"},
+        json={"picks": [{"game_id": str(game.id), "predicted_winner_team_id": str(test_teams[0].id)}]},
+    )
+    assert resp.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_picks_started_game_counted_as_locked(
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    test_teams: list[Team],
+    participant: Participant,
+    db_session: AsyncSession,
+):
+    """A pick for a game that has already started is immutable and counts toward the
+    daily cap as a locked pick — locked_not_in_batch path in the orphan-deletion loop.
+    """
+    active_competition.max_picks_per_day = 2
+    await db_session.commit()
+
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    started_game = Game(
+        competition_id=active_competition.id,
+        external_id="locked_pick_started",
+        home_team_id=test_teams[0].id,
+        away_team_id=test_teams[1].id,
+        # In the past → already started → locked
+        scheduled_start_time=datetime.utcnow() - timedelta(hours=1),
+        status=GameStatus.IN_PROGRESS,
+        venue_name="Arena", venue_city="City",
+    )
+    future_game = Game(
+        competition_id=active_competition.id,
+        external_id="locked_pick_future",
+        home_team_id=test_teams[0].id,
+        away_team_id=test_teams[1].id,
+        scheduled_start_time=datetime.utcnow() + timedelta(hours=3),
+        status=GameStatus.SCHEDULED,
+        venue_name="Arena", venue_city="City",
+    )
+    db_session.add_all([started_game, future_game])
+    await db_session.commit()
+    await db_session.refresh(started_game)
+    await db_session.refresh(future_game)
+
+    # Manually create a pick for the already-started game with today's created_at
+    started_pick = Pick(
+        user_id=test_user.id,
+        competition_id=active_competition.id,
+        game_id=started_game.id,
+        predicted_winner_team_id=test_teams[0].id,
+        created_at=today + timedelta(hours=9),  # same local day
+    )
+    db_session.add(started_pick)
+    await db_session.commit()
+
+    token = await _login(client)
+    date_str = today.strftime("%Y-%m-%d")
+
+    # Submit only the future game — the started game's pick is NOT in the batch.
+    # Backend: started_game pick is locked → locked_not_in_batch=1; batch=1 → total=2 ≤ 2 → OK
+    resp = await client.post(
+        f"/api/picks/{active_competition.id}/daily",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"date": date_str},
+        json={"picks": [{"game_id": str(future_game.id), "predicted_winner_team_id": str(test_teams[1].id)}]},
+    )
+    assert resp.status_code == 201
+
+    # Started game's pick must still exist (immutable)
+    result = await db_session.execute(
+        select(Pick).where(
+            Pick.user_id == test_user.id,
+            Pick.game_id == started_game.id,
+        )
+    )
+    assert result.scalar_one_or_none() is not None
