@@ -67,8 +67,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     // doing a full-page reload that destroys all module state and causes a loop.
     suppressRefreshRedirect()
     try {
-      // Cookie is sent automatically — if valid, we get user data back
-      const response = await api.get('/users/me')
+      // Cookie is sent automatically — if valid, we get user data back.
+      // _skipToast suppresses the generic "An unexpected error occurred" toast
+      // that would fire on cold-start timeouts (backend takes 30-60s to wake on
+      // Render free tier; a direct timeout has no error.response, so the
+      // interceptor's 401 guard doesn't protect it).
+      const response = await api.get('/users/me', { _skipToast: true })
       set({ user: response.data, isAuthenticated: true, isInitializing: false })
     } catch {
       set({ user: null, isAuthenticated: false, isInitializing: false })
