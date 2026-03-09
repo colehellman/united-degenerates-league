@@ -46,11 +46,27 @@ export function suppressRefreshRedirect(): void {
 // so the app works regardless of cross-origin cookie restrictions (mobile Safari
 // ITP blocks SameSite=None cookies from onrender.com subdomains).  Storing it
 // in memory (not localStorage) means XSS cannot exfiltrate it, and it is
-// cleared on page reload — the httpOnly refresh cookie then issues a new one.
+// cleared on page reload — the httpOnly refresh cookie or sessionStorage token
+// then issues a new one.
 let _accessToken: string | null = null
 
 export function setAccessToken(token: string | null): void {
   _accessToken = token
+}
+
+// Refresh token in sessionStorage.  sessionStorage survives page reloads but is
+// cleared when the tab closes, and is never accessible cross-origin — making it
+// a safe fallback for mobile Safari where ITP blocks the httpOnly refresh cookie.
+// The backend /auth/refresh endpoint accepts it in the request body, which takes
+// priority over the cookie when present.
+const RT_KEY = 'rt'
+
+export function setRefreshToken(token: string | null): void {
+  if (token) {
+    sessionStorage.setItem(RT_KEY, token)
+  } else {
+    sessionStorage.removeItem(RT_KEY)
+  }
 }
 
 // Inject Bearer token on every outbound request when we have one in memory.
@@ -108,16 +124,26 @@ api.interceptors.response.use(
       isRefreshing = true
 
       try {
-        // Attempt refresh — httpOnly refresh cookie sent automatically.
-        // Also update the in-memory token so Bearer auth stays current.
-        const res = await api.post('/auth/refresh')
+        // Attempt refresh — httpOnly refresh cookie sent automatically when
+        // available.  On mobile Safari (ITP blocks cross-origin cookies), pass
+        // the sessionStorage token in the request body as a fallback; the
+        // backend prefers body over cookie when both are present.
+        const storedRefreshToken = sessionStorage.getItem(RT_KEY) || undefined
+        const res = await api.post('/auth/refresh', storedRefreshToken ? { refresh_token: storedRefreshToken } : {})
         setAccessToken(res.data.access_token)
+        // Rotate the stored refresh token so the next page reload can still
+        // issue a fresh access token without re-login.
+        if (res.data.refresh_token) {
+          sessionStorage.setItem(RT_KEY, res.data.refresh_token)
+        }
         onTokenRefreshed(res.data.access_token)
         return api(originalRequest)
       } catch (refreshError) {
-        // Refresh failed — clear in-memory token so we don't keep sending a
-        // stale Bearer header on future requests.
+        // Refresh failed — clear in-memory token and sessionStorage so we don't
+        // keep sending a stale Bearer header or stale refresh token on future
+        // requests.
         setAccessToken(null)
+        sessionStorage.removeItem(RT_KEY)
         // Only hard-redirect to /login for mid-session expiry (user is on a
         // protected page). For the initial auth check, let the error propagate
         // so checkAuth()'s catch sets isInitializing=false and React Router's

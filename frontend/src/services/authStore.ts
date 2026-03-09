@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import api, { suppressRefreshRedirect, setAccessToken } from './api'
+import api, { suppressRefreshRedirect, setAccessToken, setRefreshToken } from './api'
 
 interface User {
   id: string
@@ -28,10 +28,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   login: async (email, password) => {
     const response = await api.post('/auth/login', { email, password })
-    // Store token in memory so the request interceptor can send it as a Bearer
-    // header. This bypasses cross-origin cookie restrictions (mobile Safari ITP
-    // blocks SameSite=None cookies from onrender.com subdomains).
+    // Store tokens so they survive page reloads on mobile Safari where ITP
+    // blocks cross-origin SameSite=None cookies from onrender.com subdomains.
+    // access_token → module memory (Bearer header injection via interceptor)
+    // refresh_token → sessionStorage (survives reload, cleared on tab close)
     setAccessToken(response.data.access_token)
+    setRefreshToken(response.data.refresh_token)
     // Suppress any redirect that a concurrent checkAuth refresh might trigger —
     // if checkAuth was in-flight when login succeeded, its refresh failure would
     // otherwise hard-redirect the freshly-logged-in user back to /login.
@@ -42,6 +44,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   register: async (email, username, password) => {
     const response = await api.post('/auth/register', { email, username, password })
     setAccessToken(response.data.access_token)
+    setRefreshToken(response.data.refresh_token)
     suppressRefreshRedirect()
     set({ user: response.data.user, isAuthenticated: true, isInitializing: false })
   },
@@ -53,10 +56,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       // Best-effort — even if the call fails, clear local state
     }
     setAccessToken(null)
+    setRefreshToken(null)
     set({ user: null, isAuthenticated: false })
   },
 
   checkAuth: async () => {
+    // Suppress hard redirect for the initial auth check — if the refresh cookie
+    // is missing (mobile Safari ITP) and the sessionStorage token is also gone,
+    // let React Router's <Navigate> handle the redirect client-side instead of
+    // doing a full-page reload that destroys all module state and causes a loop.
+    suppressRefreshRedirect()
     try {
       // Cookie is sent automatically — if valid, we get user data back
       const response = await api.get('/users/me')
