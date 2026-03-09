@@ -2,7 +2,21 @@ import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import api from '../services/api'
-import Spinner from '../components/Spinner'
+
+// Skeleton card shown while competitions are loading — fills the page so
+// the dashboard never looks blank while the first API call is in-flight.
+function CompetitionCardSkeleton() {
+  return (
+    <div className="card animate-pulse">
+      <div className="flex justify-between items-start mb-2">
+        <div className="h-5 bg-gray-200 rounded w-2/3" />
+        <div className="h-5 bg-gray-200 rounded w-16" />
+      </div>
+      <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
+      <div className="h-4 bg-gray-200 rounded w-1/4" />
+    </div>
+  )
+}
 
 export default function Dashboard() {
   useEffect(() => {
@@ -19,7 +33,25 @@ export default function Dashboard() {
   })
 
   if (isLoading) {
-    return <Spinner />
+    return (
+      <div className="space-y-8">
+        <div className="flex justify-between items-center flex-wrap gap-3">
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <div className="flex gap-3">
+            <div className="h-9 w-36 bg-gray-200 rounded animate-pulse" />
+            <div className="h-9 w-36 bg-gray-200 rounded animate-pulse" />
+          </div>
+        </div>
+        <div>
+          <div className="h-7 w-48 bg-gray-200 rounded animate-pulse mb-4" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <CompetitionCardSkeleton />
+            <CompetitionCardSkeleton />
+            <CompetitionCardSkeleton />
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (isError) {

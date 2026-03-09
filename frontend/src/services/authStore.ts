@@ -67,8 +67,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     // doing a full-page reload that destroys all module state and causes a loop.
     suppressRefreshRedirect()
     try {
-      // Cookie is sent automatically — if valid, we get user data back
-      const response = await api.get('/users/me')
+      // Cookie is sent automatically — if valid, we get user data back.
+      // timeout: 60000 — Render free-tier cold starts take 30-60s.  With the
+      // global 15s timeout, a sleeping backend causes /users/me to time out
+      // (not 401), so the response interceptor never enters the refresh cycle
+      // and the user is kicked to /login.  A 60s window lets Render wake the
+      // backend in time to return 401, which then triggers the refresh flow
+      // and keeps the user logged in.
+      // _skipToast: true — timeout errors have no error.response, so the
+      // interceptor's 401 guard doesn't protect them from the generic toast.
+      const response = await api.get('/users/me', { timeout: 60000, _skipToast: true })
       set({ user: response.data, isAuthenticated: true, isInitializing: false })
     } catch {
       set({ user: null, isAuthenticated: false, isInitializing: false })
