@@ -135,7 +135,13 @@ async def test_create_pick_for_started_game(client: AsyncClient, test_user: User
 
 @pytest.mark.asyncio
 async def test_create_pick_exceeds_daily_limit(client: AsyncClient, test_user: User, active_competition: Competition, test_teams, participant, db_session: AsyncSession):
-    """Test creating a pick that exceeds the daily limit."""
+    """Submitting a batch larger than max_picks_per_day must be rejected.
+
+    With replace semantics a second *single-game* submission would simply
+    swap the existing pick (still 1 total → OK).  The limit is enforced
+    against the incoming batch size, so sending 2 picks when cap is 1
+    must still return 400.
+    """
     active_competition.max_picks_per_day = 1
     await db_session.commit()
 
@@ -148,18 +154,16 @@ async def test_create_pick_exceeds_daily_limit(client: AsyncClient, test_user: U
     await db_session.refresh(game2)
 
     token = await _login(client)
+
+    # Submitting 2 games in a single batch when the cap is 1 must fail.
+    # (locked_started_picks=0 + batch_size=2 = 2 > 1)
     resp = await client.post(
         f"/api/picks/{active_competition.id}/daily",
         headers={"Authorization": f"Bearer {token}"},
-        json={"picks": [{"game_id": str(game1.id), "predicted_winner_team_id": str(test_teams[0].id)}]},
-    )
-    assert resp.status_code == 201
-    
-    # Second pick should fail
-    resp = await client.post(
-        f"/api/picks/{active_competition.id}/daily",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"picks": [{"game_id": str(game2.id), "predicted_winner_team_id": str(test_teams[0].id)}]},
+        json={"picks": [
+            {"game_id": str(game1.id), "predicted_winner_team_id": str(test_teams[0].id)},
+            {"game_id": str(game2.id), "predicted_winner_team_id": str(test_teams[0].id)},
+        ]},
     )
     assert resp.status_code == 400
     assert "daily pick limit" in resp.json()["detail"].lower()
