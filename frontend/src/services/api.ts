@@ -49,15 +49,17 @@ api.interceptors.response.use(
       toast.error(error.response?.data?.detail || 'An unexpected error occurred')
     }
 
-    // Skip the auto-refresh cycle when the failing request IS the refresh
-    // endpoint. Without this guard, the refresh request also gets a 401,
-    // re-enters the interceptor, sees isRefreshing=true, and queues itself
-    // as a subscriber that never resolves — deadlocking the entire auth flow
-    // and leaving isInitializing=true (perpetual loading screen) forever.
+    // Skip the auto-refresh cycle for auth endpoints that don't need a session:
+    //   /auth/refresh — if this itself returns 401, retrying would loop forever
+    //   /auth/login   — a 401 here means wrong credentials; attempting to refresh
+    //                   would forward the *refresh* error ("No refresh token
+    //                   provided") to the UI instead of "Incorrect password"
+    //   /auth/register — same reasoning as login
+    const AUTH_ENDPOINTS = ['/auth/refresh', '/auth/login', '/auth/register']
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      originalRequest.url !== '/auth/refresh'
+      !AUTH_ENDPOINTS.includes(originalRequest.url ?? '')
     ) {
       if (isRefreshing) {
         // Queue this request until the refresh completes
