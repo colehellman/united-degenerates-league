@@ -3,7 +3,7 @@ import logging
 import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from contextlib import asynccontextmanager
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -155,6 +155,14 @@ app.include_router(leagues.router, prefix="/api/leagues", tags=["Leagues"])
 app.include_router(health.router, prefix="/api/health", tags=["Health"])
 app.include_router(bug_reports.router, prefix="/api/bug-reports", tags=["Bug Reports"])
 app.include_router(ws.router, prefix="/ws", tags=["WebSocket"])
+
+
+@app.api_route("/ping", methods=["GET", "HEAD"])
+async def ping():
+    """Lightweight keepalive for UptimeRobot free tier (HEAD-only).
+    /health is intercepted by Render's edge layer for HEAD requests; this
+    path has no special Render handling so HEAD reaches FastAPI directly."""
+    return Response(status_code=200)
 
 
 @app.get("/")
