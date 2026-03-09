@@ -1,32 +1,16 @@
-# 🏗️ United Degenerates League - Architecture Documentation
+# United Degenerates League — Architecture
 
-**Version:** 2.0.0
 **Last Updated:** 2026-03-06
-**Status:** Development (80-90% Complete)
 
 ---
 
-## 📊 Executive Summary
+## Overview
 
-**United Degenerates League (UDL)** is a sports prediction platform built with FastAPI + React, designed for friends to compete in daily picks and fixed team challenges across multiple sports leagues (NFL, NBA, MLB, NHL, NCAA, PGA).
+**United Degenerates League (UDL)** is a sports prediction platform built with FastAPI + React. Friends compete in daily picks and fixed team challenges across NFL, NBA, MLB, NHL, NCAA, and PGA.
 
-**Architecture Pattern:** Clean Architecture / Layered Monolith
-**Paradigm:** Async-first backend with reactive frontend
-**Deployment:** Docker + Render
-
-### Key Metrics (Updated)
-- **Backend:** 34 Python files (~3,000 LOC)
-- **Frontend:** 10 TypeScript/TSX files (~2,000 LOC)
-- **Database Models:** 8 core entities with proper relationships
-- **API Endpoints:** 25+ RESTful routes, all complete
-- **External APIs:** 5 sports data providers with failover (orchestration complete, clients pending)
-
-### Current Status (Revised Assessment)
-- ✅ **Complete (70%):** Core models, API structure, auth system, multi-API failover, frontend UI (login, register, dashboard, browse)
-- 🚧 **In Progress (20%):** Background jobs, API client implementations, pick submission UI
-- ❌ **Pending (10%):** Database migrations, testing infrastructure, production hardening
-
-**Key Discovery:** Frontend is significantly more complete than initially assessed. Login and Register pages are fully implemented with proper validation, error handling, and UI polish.
+**Architecture Pattern:** Layered monolith — API layer → service layer → ORM → PostgreSQL
+**Paradigm:** Async-first backend (SQLAlchemy 2.0 async), reactive frontend (TanStack Query)
+**Deployment:** Docker + Render (frontend as static site, backend as web service)
 
 ---
 
