@@ -138,12 +138,18 @@ api.interceptors.response.use(
         }
         onTokenRefreshed(res.data.access_token)
         return api(originalRequest)
-      } catch (refreshError) {
-        // Refresh failed — clear in-memory token and sessionStorage so we don't
-        // keep sending a stale Bearer header or stale refresh token on future
-        // requests.
+      } catch (refreshError: any) {
+        // Refresh failed — clear the in-memory access token unconditionally.
         setAccessToken(null)
-        sessionStorage.removeItem(RT_KEY)
+        // Only wipe the stored refresh token when the server explicitly rejects
+        // it (HTTP 401 = invalid or expired token).  Network errors, timeouts
+        // (axios code ECONNABORTED / ERR_NETWORK), and 5xx responses do NOT
+        // mean the token is bad — Render free-tier cold starts routinely cause
+        // 15 s timeouts.  Clearing on those would destroy a valid token and
+        // force the user to re-login every morning.
+        if (refreshError?.response?.status === 401) {
+          sessionStorage.removeItem(RT_KEY)
+        }
         // Only hard-redirect to /login for mid-session expiry (user is on a
         // protected page). For the initial auth check, let the error propagate
         // so checkAuth()'s catch sets isInitializing=false and React Router's
