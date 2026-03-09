@@ -8,6 +8,21 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
+async def test_ping_get(client: AsyncClient):
+    """GET /ping returns 200 for standard clients."""
+    resp = await client.get("/ping")
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_ping_head(client: AsyncClient):
+    """HEAD /ping returns 200 — required for UptimeRobot free tier which
+    is locked to HEAD-only requests and cannot be changed without a paid plan."""
+    resp = await client.head("/ping")
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_root_endpoint(client: AsyncClient):
     """GET / returns API metadata."""
     resp = await client.get("/")
