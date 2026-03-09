@@ -46,8 +46,10 @@ async def _score_picks_for_game(db, game: Game):
     for pick in picks:
         # Determine if pick is correct
         if game.winner_team_id is None:
-            # Tie, cancelled, or no result - no points awarded
-            pick.is_correct = False
+            # Tie, cancelled, or no result: award no points but do NOT mark
+            # is_correct=False.  Leaving it NULL excludes the pick from the
+            # win/loss/accuracy counters in _recalculate_participant_stats,
+            # so a no-result game never penalises the player's record.
             pick.points_earned = 0
         elif pick.predicted_winner_team_id == game.winner_team_id:
             # Correct pick
@@ -538,8 +540,17 @@ async def sync_games_from_api():
                 league_comps = data["competitions"]
 
                 try:
-                    # Fetch today's scoreboard from ESPN (cached for 60s)
-                    api_games = await sports_service.get_live_scores(league_key)
+                    # Fetch today + next 2 days so upcoming games are visible
+                    # for picks before game day.  Grouped by league so each
+                    # league makes at most 3 API calls per 5-minute cycle.
+                    today_bg = datetime.utcnow().replace(
+                        hour=0, minute=0, second=0, microsecond=0
+                    )
+                    api_games = []
+                    for days_ahead in range(3):
+                        day = today_bg + timedelta(days=days_ahead)
+                        day_games = await sports_service.get_schedule(league_key, day, day)
+                        api_games.extend(day_games)
 
                     if not api_games:
                         logger.debug(f"No games from ESPN for {league_key}")
@@ -615,14 +626,27 @@ async def sync_games_for_competition(competition_id: str) -> dict:
         league = competition.league
         league_key = league.name.value if hasattr(league.name, "value") else str(league.name)
 
-        # Fetch today's scoreboard from ESPN
-        api_games = await sports_service.get_live_scores(league_key)
+        # Fetch games for every date from today through the competition's end
+        # date so users can see and pick upcoming games, not just today's.
+        # Each ESPN scoreboard request covers one calendar day (YYYYMMDD).
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        comp_end = competition.end_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Cap at 14 days to avoid hammering the ESPN API for very long
+        # competitions or competitions whose end_date is far in the future.
+        fetch_through = min(comp_end, today + timedelta(days=14))
+
+        api_games: list = []
+        current = today
+        while current <= fetch_through:
+            day_games = await sports_service.get_schedule(league_key, current, current)
+            api_games.extend(day_games)
+            current += timedelta(days=1)
 
         if not api_games:
             return {
                 "created": 0,
                 "updated": 0,
-                "message": f"No games returned by ESPN for {league_key} today",
+                "message": f"No games returned by ESPN for {league_key} in competition window",
             }
 
         # Build team cache: external_id -> Team

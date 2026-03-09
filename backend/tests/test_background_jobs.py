@@ -203,7 +203,9 @@ async def test_score_picks_for_game_tie(
     await db_session.commit()
     await db_session.refresh(pick)
 
-    assert pick.is_correct is False
+    # Void games leave is_correct=None so they don't count as losses.
+    # Only points_earned is zeroed out.
+    assert pick.is_correct is None
     assert pick.points_earned == 0
 
 
@@ -581,7 +583,8 @@ async def test_sync_games_from_api_creates_games(
     session_patcher = _make_session_patcher(db_session)
     with patch("app.services.background_jobs.async_session", session_patcher):
         with patch(
-            "app.services.background_jobs.sports_service.get_live_scores",
+            # sync_games_from_api now calls get_schedule (today + 2 days)
+            "app.services.background_jobs.sports_service.get_schedule",
             new=AsyncMock(return_value=[mock_game_data]),
         ):
             await sync_games_from_api()
@@ -944,11 +947,13 @@ async def test_sync_games_for_competition_no_games_from_espn(
     active_competition: Competition,
 ):
     """Returns a 'no games' message when ESPN returns an empty scoreboard."""
+    from unittest.mock import AsyncMock
     session_patcher = _make_session_patcher(db_session)
     with patch("app.services.background_jobs.async_session", session_patcher), \
          patch(
-             "app.services.background_jobs.sports_service.get_live_scores",
-             return_value=[],
+             # sync_games_for_competition loops get_schedule per date now
+             "app.services.background_jobs.sports_service.get_schedule",
+             new=AsyncMock(return_value=[]),
          ):
         result = await sync_games_for_competition(str(active_competition.id))
 
@@ -982,7 +987,8 @@ async def test_sync_games_for_competition_creates_games(
     session_patcher = _make_session_patcher(db_session)
     with patch("app.services.background_jobs.async_session", session_patcher), \
          patch(
-             "app.services.background_jobs.sports_service.get_live_scores",
+             # sync_games_for_competition now loops get_schedule per date
+             "app.services.background_jobs.sports_service.get_schedule",
              new=AsyncMock(return_value=[mock_game]),
          ):
         result = await sync_games_for_competition(str(active_competition.id))
