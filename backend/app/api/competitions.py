@@ -10,7 +10,7 @@ from app.models.competition import Competition, CompetitionStatus, Visibility
 from app.models.user import UserRole
 from app.models.participant import Participant, JoinRequest, JoinRequestStatus
 from app.models.game import Game
-from app.models.league import Team, Golfer
+from app.models.league import Team, Golfer, League
 from app.models.pick import FixedTeamSelection
 from app.schemas.competition import (
     CompetitionCreate,
@@ -21,6 +21,38 @@ from app.schemas.competition import (
 from app.schemas.participant import JoinRequestCreate, JoinRequestResponse
 
 router = APIRouter()
+
+
+# Month (1-12) each league's season normally begins.
+# Leagues whose season spans two calendar years (NBA Oct→Jun, NHL Oct→Jun,
+# NFL Sep→Feb, EPL Aug→May) must use this map so H2H lookups don't miss
+# October-December games when the calendar year rolls over to January.
+_LEAGUE_SEASON_START_MONTH: dict = {
+    "NFL": 9,            # September
+    "NCAA_FOOTBALL": 9,  # September
+    "NBA": 10,           # October
+    "NHL": 10,           # October
+    "NCAA_BASKETBALL": 11,  # November
+    "EPL": 8,            # August
+    "UCL": 8,            # August (Union of European Football Leagues, v2)
+    "MLS": 3,            # March
+    "MLB": 4,            # April  (single calendar year — Jan anchor works too)
+    "PGA": 9,            # PGA Tour season runs Sep-Aug
+}
+
+
+def _season_start(league_name: str) -> datetime:
+    """Return the start-of-day datetime for the beginning of the current season.
+
+    For cross-year leagues (NBA, NHL, NFL …) the season might have started in a
+    prior calendar year.  E.g. on 2026-03-10, NBA season started 2025-10-01.
+    """
+    now = datetime.utcnow()
+    start_month = _LEAGUE_SEASON_START_MONTH.get(league_name, 1)
+    # If we haven't yet reached the start month this calendar year, the season
+    # began in the previous calendar year.
+    season_year = now.year if now.month >= start_month else now.year - 1
+    return datetime(season_year, start_month, 1)
 
 
 @router.post("", response_model=CompetitionResponse, status_code=status.HTTP_201_CREATED)
@@ -414,19 +446,76 @@ async def get_competition_games(
     result = await db.execute(query.order_by(Game.scheduled_start_time))
     games = result.scalars().all()
 
+    # Resolve the competition's league name once so _season_start() can pick
+    # the correct cross-year anchor for H2H queries (NBA, NHL, NFL etc. all
+    # have seasons that begin mid-year in the prior calendar year).
+    league_result = await db.execute(
+        select(League).where(League.id == competition.league_id)
+    )
+    league = league_result.scalar_one_or_none()
+    league_name = league.name.value if league else "unknown"
+    h2h_season_start = _season_start(league_name)
+
+    # Pre-fetch all teams for this competition's games in one query to avoid
+    # N+1 selects in the loop below.
+    team_ids = set()
+    for game in games:
+        team_ids.add(game.home_team_id)
+        team_ids.add(game.away_team_id)
+
+    teams_by_id: dict = {}
+    if team_ids:
+        team_result = await db.execute(
+            select(Team).where(Team.id.in_(list(team_ids)))
+        )
+        for t in team_result.scalars().all():
+            teams_by_id[t.id] = t
+
     # Convert to response format with team details
     games_response = []
     for game in games:
-        # Fetch home and away teams
-        home_team_result = await db.execute(
-            select(Team).where(Team.id == game.home_team_id)
-        )
-        home_team = home_team_result.scalar_one()
+        home_team = teams_by_id.get(game.home_team_id)
+        away_team = teams_by_id.get(game.away_team_id)
 
-        away_team_result = await db.execute(
-            select(Team).where(Team.id == game.away_team_id)
+        if not home_team or not away_team:
+            continue
+
+        # Head-to-head record: finished games in any competition this season
+        # between these two specific teams, from the home team's perspective.
+        # Use _season_start() so cross-year leagues (NBA Oct-Jun, NHL Oct-Jun,
+        # NFL Sep-Feb, EPL Aug-May) include games from the prior calendar year
+        # rather than resetting the window at January 1.
+        h2h_result = await db.execute(
+            select(Game).where(
+                and_(
+                    Game.winner_team_id.is_not(None),
+                    Game.scheduled_start_time >= h2h_season_start,
+                    or_(
+                        and_(
+                            Game.home_team_id == home_team.id,
+                            Game.away_team_id == away_team.id,
+                        ),
+                        and_(
+                            Game.home_team_id == away_team.id,
+                            Game.away_team_id == home_team.id,
+                        ),
+                    ),
+                )
+            )
         )
-        away_team = away_team_result.scalar_one()
+        h2h_games = h2h_result.scalars().all()
+        h2h_home_wins = sum(1 for g in h2h_games if g.winner_team_id == home_team.id)
+        h2h_away_wins = sum(1 for g in h2h_games if g.winner_team_id == away_team.id)
+
+        def _record_str(wins, losses, ties):
+            """Format W-L or W-L-T, returning None if no data."""
+            if wins is None and losses is None:
+                return None
+            w = wins or 0
+            l = losses or 0
+            if ties:
+                return f"{w}-{l}-{ties}"
+            return f"{w}-{l}"
 
         games_response.append({
             "id": str(game.id),
@@ -442,12 +531,18 @@ async def get_competition_games(
                 "name": home_team.name,
                 "city": home_team.city,
                 "abbreviation": home_team.abbreviation,
+                # Season record synced from ESPN each cycle; None until first sync.
+                "record": _record_str(home_team.wins, home_team.losses, home_team.ties),
+                # Head-to-head wins against the opponent this season.
+                "h2h_wins": h2h_home_wins,
             },
             "away_team": {
                 "id": str(away_team.id),
                 "name": away_team.name,
                 "city": away_team.city,
                 "abbreviation": away_team.abbreviation,
+                "record": _record_str(away_team.wins, away_team.losses, away_team.ties),
+                "h2h_wins": h2h_away_wins,
             },
             "home_team_score": game.home_team_score,
             "away_team_score": game.away_team_score,

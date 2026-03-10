@@ -40,6 +40,15 @@ class GameData:
         away_team_external_id: Optional[str] = None,
         home_team_abbreviation: Optional[str] = None,
         away_team_abbreviation: Optional[str] = None,
+        # Season win/loss/tie record at the time the game data was fetched.
+        # Sourced from the "overall" record in the sports API response.
+        # None means the API did not provide record data for this team.
+        home_team_wins: Optional[int] = None,
+        home_team_losses: Optional[int] = None,
+        home_team_ties: Optional[int] = None,
+        away_team_wins: Optional[int] = None,
+        away_team_losses: Optional[int] = None,
+        away_team_ties: Optional[int] = None,
     ):
         self.external_id = external_id
         self.home_team = home_team
@@ -54,6 +63,12 @@ class GameData:
         self.away_team_external_id = away_team_external_id
         self.home_team_abbreviation = home_team_abbreviation
         self.away_team_abbreviation = away_team_abbreviation
+        self.home_team_wins = home_team_wins
+        self.home_team_losses = home_team_losses
+        self.home_team_ties = home_team_ties
+        self.away_team_wins = away_team_wins
+        self.away_team_losses = away_team_losses
+        self.away_team_ties = away_team_ties
 
 
 class BaseSportsAPIClient(ABC):

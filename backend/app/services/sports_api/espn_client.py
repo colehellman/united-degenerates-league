@@ -153,11 +153,32 @@ class ESPNAPIClient(BaseSportsAPIClient):
                 score = competitor.get("score")
                 home_away = competitor.get("homeAway", "")
 
+                # Parse season record from ESPN's "records" array.
+                # ESPN returns a list of record objects; "overall"/"total" is the
+                # full-season win-loss-tie, e.g. {"name":"overall","summary":"12-5"}.
+                wins = losses = ties = None
+                for rec in competitor.get("records", []):
+                    rec_name = rec.get("name", "").lower()
+                    rec_type = rec.get("type", "").lower()
+                    if rec_name in ("overall", "total") or rec_type in ("total",):
+                        summary = rec.get("summary", "")
+                        parts = summary.split("-")
+                        try:
+                            wins = int(parts[0]) if len(parts) > 0 else None
+                            losses = int(parts[1]) if len(parts) > 1 else None
+                            ties = int(parts[2]) if len(parts) > 2 else None
+                        except (ValueError, IndexError):
+                            pass
+                        break
+
                 info = {
                     "name": team_name,
                     "score": int(score) if score and score.isdigit() else None,
                     "external_id": str(team_ext_id),
                     "abbreviation": team_abbr,
+                    "wins": wins,
+                    "losses": losses,
+                    "ties": ties,
                 }
 
                 if home_away == "home":
@@ -201,6 +222,12 @@ class ESPNAPIClient(BaseSportsAPIClient):
                 away_team_external_id=away_team["external_id"],
                 home_team_abbreviation=home_team["abbreviation"],
                 away_team_abbreviation=away_team["abbreviation"],
+                home_team_wins=home_team["wins"],
+                home_team_losses=home_team["losses"],
+                home_team_ties=home_team["ties"],
+                away_team_wins=away_team["wins"],
+                away_team_losses=away_team["losses"],
+                away_team_ties=away_team["ties"],
             )
 
         except Exception as e:
