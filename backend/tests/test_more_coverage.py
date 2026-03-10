@@ -407,3 +407,102 @@ async def test_get_leaderboard_sorted(
     assert resp.status_code == 200
     data = resp.json()
     assert data[0]["user_id"] == str(p2.user_id) # p2 has a better streak
+
+
+@pytest.mark.asyncio
+async def test_register_success(client: AsyncClient, db_session: AsyncSession):
+    """Happy path: POST /auth/register creates a user and returns tokens."""
+    resp = await client.post(
+        "/api/auth/register",
+        json={"email": "newuser@example.com", "username": "brandnewuser", "password": "Password123"},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+    assert data["user"]["email"] == "newuser@example.com"
+    assert data["user"]["username"] == "brandnewuser"
+
+
+@pytest.mark.asyncio
+async def test_create_daily_picks_success(
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    participant: Participant,
+    test_teams,
+    db_session: AsyncSession,
+):
+    """Happy path: POST /picks/{id}/daily creates a pick for an unstarted game."""
+    from app.models.game import Game, GameStatus
+
+    game = Game(
+        competition_id=active_competition.id,
+        external_id="upcoming_test_game",
+        home_team_id=test_teams[0].id,
+        away_team_id=test_teams[1].id,
+        scheduled_start_time=datetime.utcnow() + timedelta(hours=3),
+        status=GameStatus.SCHEDULED,
+    )
+    db_session.add(game)
+    await db_session.commit()
+    await db_session.refresh(game)
+
+    token = await _login(client)
+    resp = await client.post(
+        f"/api/picks/{active_competition.id}/daily",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"picks": [{"game_id": str(game.id), "predicted_winner_team_id": str(test_teams[0].id)}]},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["game_id"] == str(game.id)
+    assert data[0]["predicted_winner_team_id"] == str(test_teams[0].id)
+
+
+@pytest.mark.asyncio
+async def test_get_my_picks_with_date_filter(
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    participant: Participant,
+    test_teams,
+    db_session: AsyncSession,
+):
+    """GET /picks/{id}/my-picks with a date filter returns picks for that day."""
+    from app.models.game import Game, GameStatus
+    from app.models.pick import Pick
+
+    game = Game(
+        competition_id=active_competition.id,
+        external_id="date_filter_game",
+        home_team_id=test_teams[0].id,
+        away_team_id=test_teams[1].id,
+        scheduled_start_time=datetime.utcnow() + timedelta(hours=2),
+        status=GameStatus.SCHEDULED,
+    )
+    db_session.add(game)
+    await db_session.commit()
+    await db_session.refresh(game)
+
+    pick = Pick(
+        user_id=test_user.id,
+        competition_id=active_competition.id,
+        game_id=game.id,
+        predicted_winner_team_id=test_teams[0].id,
+    )
+    db_session.add(pick)
+    await db_session.commit()
+
+    token = await _login(client)
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    resp = await client.get(
+        f"/api/picks/{active_competition.id}/my-picks",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"date": today},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["game_id"] == str(game.id)
