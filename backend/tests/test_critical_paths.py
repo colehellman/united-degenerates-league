@@ -519,11 +519,15 @@ async def test_create_competition_with_all_options(client: AsyncClient, test_use
 async def test_create_competition_tz_aware_dates(client: AsyncClient, test_user: User, test_league: League):
     """Test that ISO dates with 'Z' suffix (tz-aware) don't crash asyncpg.
 
-    Browsers send '2026-03-10T00:00:00.000Z' but the DB uses
+    Browsers send dates like '2026-03-10T00:00:00.000Z' but the DB uses
     TIMESTAMP WITHOUT TIME ZONE.  The schema must strip tzinfo so asyncpg
     doesn't choke mixing tz-aware and naive datetimes in the same INSERT.
+    Dates are dynamic (tomorrow / +8 days) so the test never hits the
+    "Start date cannot be in the past" validator as calendar time advances.
     """
     token = await _login(client)
+    start = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    end = (datetime.utcnow() + timedelta(days=8)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     response = await client.post(
         "/api/competitions",
@@ -532,8 +536,8 @@ async def test_create_competition_tz_aware_dates(client: AsyncClient, test_user:
             "name": "TZ Aware Dates Test",
             "mode": "daily_picks",
             "league_id": str(test_league.id),
-            "start_date": "2026-03-10T00:00:00Z",
-            "end_date": "2026-03-17T00:00:00Z",
+            "start_date": start,
+            "end_date": end,
             "visibility": "public",
             "join_type": "open",
         }
