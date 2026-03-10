@@ -148,8 +148,16 @@ async def create_daily_picks_batch(
                 detail=f"Game {pick_item.game_id} not found",
             )
 
-        # Check if game has started (locked)
+        # Check if game has started (locked).
+        # When the frontend re-submits the full picks state it includes any
+        # already-started game the user previously picked (so the UI stays in
+        # sync).  If we already have an immutable pick for that game, silently
+        # skip it — the pick is locked in place and nothing changes.  Only
+        # reject if the user is trying to create a *new* pick on a started game
+        # (no prior pick exists), which is genuinely not allowed.
         if now >= game.scheduled_start_time:
+            if str(pick_item.game_id) in existing_by_game:
+                continue  # immutable — already in DB, leave it alone
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Game {game.id} has already started - picks are locked",
