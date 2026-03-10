@@ -31,7 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Store tokens so they survive page reloads on mobile Safari where ITP
     // blocks cross-origin SameSite=None cookies from onrender.com subdomains.
     // access_token → module memory (Bearer header injection via interceptor)
-    // refresh_token → sessionStorage (survives reload, cleared on tab close)
+    // refresh_token → localStorage (persists across iOS tab kills/restores)
     setAccessToken(response.data.access_token)
     setRefreshToken(response.data.refresh_token)
     // Suppress any redirect that a concurrent checkAuth refresh might trigger —
@@ -62,17 +62,21 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   checkAuth: async () => {
     // Suppress hard redirect for the initial auth check — if the refresh cookie
-    // is missing (mobile Safari ITP) and the sessionStorage token is also gone,
+    // is missing (mobile Safari ITP) and the localStorage token is also gone,
     // let React Router's <Navigate> handle the redirect client-side instead of
     // doing a full-page reload that destroys all module state and causes a loop.
     suppressRefreshRedirect()
     try {
       // Cookie is sent automatically — if valid, we get user data back.
-      // _skipToast suppresses the generic "An unexpected error occurred" toast
-      // that would fire on cold-start timeouts (backend takes 30-60s to wake on
-      // Render free tier; a direct timeout has no error.response, so the
-      // interceptor's 401 guard doesn't protect it).
-      const response = await api.get('/users/me', { _skipToast: true })
+      // timeout: 60000 — Render free-tier cold starts take 30-60s.  With the
+      // global 15s timeout, a sleeping backend causes /users/me to time out
+      // (not 401), so the response interceptor never enters the refresh cycle
+      // and the user is kicked to /login.  A 60s window lets Render wake the
+      // backend in time to return 401, which then triggers the refresh flow
+      // and keeps the user logged in.
+      // _skipToast: true — timeout errors have no error.response, so the
+      // interceptor's 401 guard doesn't protect them from the generic toast.
+      const response = await api.get('/users/me', { timeout: 60000, _skipToast: true })
       set({ user: response.data, isAuthenticated: true, isInitializing: false })
     } catch {
       set({ user: null, isAuthenticated: false, isInitializing: false })

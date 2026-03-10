@@ -263,3 +263,170 @@ def test_set_cache_no_redis(sports_service):
     """_set_cache is a no-op when redis_client is None."""
     sports_service.redis_client = None
     sports_service._set_cache("key", "val", 60)  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# Error-handler coverage: circuit breaker, rate-limit, generic exception
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_get_schedule_circuit_breaker_open_falls_through(sports_service):
+    """CircuitBreakerOpenError on primary is recorded and secondary is tried."""
+    from app.services.circuit_breaker import CircuitBreakerOpenError
+
+    game = GameData(
+        external_id="cb_fallback",
+        home_team="A",
+        away_team="B",
+        scheduled_start_time=datetime.utcnow(),
+        status="scheduled",
+    )
+    open_breaker = AsyncMock()
+    open_breaker.async_call.side_effect = CircuitBreakerOpenError("open")
+
+    good_breaker = AsyncMock()
+    good_breaker.async_call.return_value = [game]
+
+    with patch("app.services.sports_api.sports_service.circuit_breaker_manager") as mock_cbm:
+        mock_cbm.get_breaker.side_effect = [open_breaker, good_breaker]
+        games = await sports_service.get_schedule(
+            "NFL", datetime(2023, 1, 1), datetime(2023, 1, 3), use_cache=False
+        )
+
+    assert len(games) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_schedule_generic_exception_falls_through(sports_service):
+    """A generic exception from the primary API causes fallback to secondary."""
+    game = GameData(
+        external_id="exc_fallback",
+        home_team="A",
+        away_team="B",
+        scheduled_start_time=datetime.utcnow(),
+        status="scheduled",
+    )
+    error_breaker = AsyncMock()
+    error_breaker.async_call.side_effect = ValueError("unexpected API error")
+
+    good_breaker = AsyncMock()
+    good_breaker.async_call.return_value = [game]
+
+    with patch("app.services.sports_api.sports_service.circuit_breaker_manager") as mock_cbm:
+        mock_cbm.get_breaker.side_effect = [error_breaker, good_breaker]
+        games = await sports_service.get_schedule(
+            "NFL", datetime(2023, 1, 1), datetime(2023, 1, 3), use_cache=False
+        )
+
+    assert len(games) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_live_scores_circuit_breaker_open_falls_through(sports_service):
+    """CircuitBreakerOpenError on primary live-scores call falls through to secondary."""
+    from app.services.circuit_breaker import CircuitBreakerOpenError
+
+    game = GameData(
+        external_id="live_cb",
+        home_team="X",
+        away_team="Y",
+        scheduled_start_time=datetime.utcnow(),
+        status="in_progress",
+    )
+    open_breaker = AsyncMock()
+    open_breaker.async_call.side_effect = CircuitBreakerOpenError("open")
+
+    good_breaker = AsyncMock()
+    good_breaker.async_call.return_value = [game]
+
+    with patch("app.services.sports_api.sports_service.circuit_breaker_manager") as mock_cbm:
+        mock_cbm.get_breaker.side_effect = [open_breaker, good_breaker]
+        games = await sports_service.get_live_scores("NFL", use_cache=False)
+
+    assert len(games) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_live_scores_rate_limit_falls_through(sports_service):
+    """RateLimitExceededError on primary live-scores falls through to secondary."""
+    from app.services.sports_api.base import RateLimitExceededError
+
+    game = GameData(
+        external_id="live_rl",
+        home_team="X",
+        away_team="Y",
+        scheduled_start_time=datetime.utcnow(),
+        status="in_progress",
+    )
+    rate_breaker = AsyncMock()
+    rate_breaker.async_call.side_effect = RateLimitExceededError("rate limited")
+
+    good_breaker = AsyncMock()
+    good_breaker.async_call.return_value = [game]
+
+    with patch("app.services.sports_api.sports_service.circuit_breaker_manager") as mock_cbm:
+        mock_cbm.get_breaker.side_effect = [rate_breaker, good_breaker]
+        games = await sports_service.get_live_scores("NFL", use_cache=False)
+
+    assert len(games) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_game_details_exception_returns_none(sports_service):
+    """Exceptions in get_game_details are caught and None is returned."""
+    error_breaker = AsyncMock()
+    error_breaker.async_call.side_effect = ValueError("API failure")
+
+    with patch("app.services.sports_api.sports_service.circuit_breaker_manager") as mock_cbm:
+        mock_cbm.get_breaker.return_value = error_breaker
+        result = await sports_service.get_game_details("NFL", "g1", use_cache=False)
+
+    assert result is None
+
+
+def test_deserialize_games_skips_malformed_entry(sports_service):
+    """_deserialize_games logs and skips entries that fail validation."""
+    import json
+
+    valid = {
+        "external_id": "v1",
+        "home_team": "Home",
+        "away_team": "Away",
+        "scheduled_start_time": datetime.utcnow().isoformat(),
+        "status": "scheduled",
+        "home_score": None,
+        "away_score": None,
+        "venue": None,
+        "home_team_external_id": None,
+        "away_team_external_id": None,
+        "home_team_abbreviation": None,
+        "away_team_abbreviation": None,
+    }
+    # Bad entry: scheduled_start_time is not a valid ISO string → datetime.fromisoformat fails
+    bad = {
+        "external_id": "bad",
+        "home_team": "X",
+        "away_team": "Y",
+        "scheduled_start_time": "NOT-A-DATE",
+        "status": "scheduled",
+    }
+    data = json.dumps([valid, bad])
+    games = sports_service._deserialize_games(data)
+    assert len(games) == 1
+    assert games[0].external_id == "v1"
+
+
+@pytest.mark.asyncio
+async def test_service_close_calls_client_close(sports_service):
+    """close() awaits client.close() for each API client and closes Redis."""
+    await sports_service.close()
+    for client in sports_service.clients:
+        client.close.assert_called_once()
+    sports_service.redis_client.close.assert_called_once()
+
+
+def test_sports_data_service_redis_init_failure():
+    """SportsDataService sets redis_client=None when Redis connection fails."""
+    with patch("redis.from_url", side_effect=Exception("connection refused")):
+        service = SportsDataService()
+    assert service.redis_client is None

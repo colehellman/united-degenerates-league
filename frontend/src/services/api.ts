@@ -52,7 +52,7 @@ export function suppressRefreshRedirect(): void {
 // so the app works regardless of cross-origin cookie restrictions (mobile Safari
 // ITP blocks SameSite=None cookies from onrender.com subdomains).  Storing it
 // in memory (not localStorage) means XSS cannot exfiltrate it, and it is
-// cleared on page reload — the httpOnly refresh cookie or sessionStorage token
+// cleared on page reload — the httpOnly refresh cookie or localStorage token
 // then issues a new one.
 let _accessToken: string | null = null
 
@@ -60,18 +60,21 @@ export function setAccessToken(token: string | null): void {
   _accessToken = token
 }
 
-// Refresh token in sessionStorage.  sessionStorage survives page reloads but is
-// cleared when the tab closes, and is never accessible cross-origin — making it
-// a safe fallback for mobile Safari where ITP blocks the httpOnly refresh cookie.
-// The backend /auth/refresh endpoint accepts it in the request body, which takes
-// priority over the cookie when present.
+// Refresh token in localStorage.  localStorage persists across page reloads,
+// tab closes, AND iOS tab suspension — which is the critical difference from
+// sessionStorage.  On iOS, when the OS kills a browser tab to reclaim memory
+// and the user returns to it, the browser starts a NEW session (sessionStorage
+// is cleared).  localStorage is NOT cleared on session boundaries, matching
+// the 7-day refresh token TTL.  It is still explicitly cleared on logout.
+// Never accessible cross-origin — safe fallback for mobile Safari where ITP
+// blocks the httpOnly refresh cookie from onrender.com subdomains.
 const RT_KEY = 'rt'
 
 export function setRefreshToken(token: string | null): void {
   if (token) {
-    sessionStorage.setItem(RT_KEY, token)
+    localStorage.setItem(RT_KEY, token)
   } else {
-    sessionStorage.removeItem(RT_KEY)
+    localStorage.removeItem(RT_KEY)
   }
 }
 
@@ -132,15 +135,15 @@ api.interceptors.response.use(
       try {
         // Attempt refresh — httpOnly refresh cookie sent automatically when
         // available.  On mobile Safari (ITP blocks cross-origin cookies), pass
-        // the sessionStorage token in the request body as a fallback; the
+        // the localStorage token in the request body as a fallback; the
         // backend prefers body over cookie when both are present.
-        const storedRefreshToken = sessionStorage.getItem(RT_KEY) || undefined
+        const storedRefreshToken = localStorage.getItem(RT_KEY) || undefined
         const res = await api.post(
           '/auth/refresh',
           storedRefreshToken ? { refresh_token: storedRefreshToken } : {},
           {
             // Render free-tier cold starts take 30-60s — well above the global
-            // 15s timeout.  Override here so a valid sessionStorage refresh token
+            // 15s timeout.  Override here so a valid localStorage refresh token
             // isn't abandoned mid-wake and the user is forced to re-login.
             timeout: 60000,
             // Refresh failures are handled via redirect logic below; suppress the
@@ -153,7 +156,7 @@ api.interceptors.response.use(
         // Rotate the stored refresh token so the next page reload can still
         // issue a fresh access token without re-login.
         if (res.data.refresh_token) {
-          sessionStorage.setItem(RT_KEY, res.data.refresh_token)
+          localStorage.setItem(RT_KEY, res.data.refresh_token)
         }
         onTokenRefreshed(res.data.access_token)
         return api(originalRequest)
@@ -167,7 +170,7 @@ api.interceptors.response.use(
         // 15 s timeouts.  Clearing on those would destroy a valid token and
         // force the user to re-login every morning.
         if (refreshError?.response?.status === 401) {
-          sessionStorage.removeItem(RT_KEY)
+          localStorage.removeItem(RT_KEY)
         }
         // Only hard-redirect to /login for mid-session expiry (user is on a
         // protected page). For the initial auth check, let the error propagate
