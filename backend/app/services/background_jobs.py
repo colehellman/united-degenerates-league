@@ -586,6 +586,20 @@ async def sync_games_from_api():
                         if not home_team or not away_team:
                             continue
 
+                        # Refresh season record on the team rows from the API payload.
+                        _apply_team_record(
+                            home_team,
+                            game_data.home_team_wins,
+                            game_data.home_team_losses,
+                            game_data.home_team_ties,
+                        )
+                        _apply_team_record(
+                            away_team,
+                            game_data.away_team_wins,
+                            game_data.away_team_losses,
+                            game_data.away_team_ties,
+                        )
+
                         # For each competition using this league, sync the game
                         for comp in league_comps:
                             created, updated = await _sync_game_for_competition(
@@ -681,6 +695,19 @@ async def sync_games_for_competition(competition_id: str) -> dict:
             if not home_team or not away_team:
                 continue
 
+            _apply_team_record(
+                home_team,
+                game_data.home_team_wins,
+                game_data.home_team_losses,
+                game_data.home_team_ties,
+            )
+            _apply_team_record(
+                away_team,
+                game_data.away_team_wins,
+                game_data.away_team_losses,
+                game_data.away_team_ties,
+            )
+
             created, updated = await _sync_game_for_competition(
                 db, competition, game_data, home_team, away_team,
             )
@@ -720,6 +747,25 @@ async def _find_or_create_team(
     cache[external_id] = team
     logger.info(f"Created team: {name} ({abbreviation})")
     return team
+
+
+def _apply_team_record(
+    team: Team,
+    wins: Optional[int],
+    losses: Optional[int],
+    ties: Optional[int],
+) -> None:
+    """Update a Team's season record in-place when the API provides values.
+
+    Only writes when the incoming value is not None so that a stale/partial
+    API response never overwrites a previously-good record with nulls.
+    """
+    if wins is not None:
+        team.wins = wins
+    if losses is not None:
+        team.losses = losses
+    if ties is not None:
+        team.ties = ties
 
 
 async def _sync_game_for_competition(

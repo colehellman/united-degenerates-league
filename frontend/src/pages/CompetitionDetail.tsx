@@ -656,6 +656,9 @@ export default function CompetitionDetail() {
                                 >
                                   <div className="font-semibold text-sm">{game.away_team.city}</div>
                                   <div className="font-bold">{game.away_team.name}</div>
+                                  {game.away_team.record && (
+                                    <div className="text-xs text-gray-500 mt-0.5">{game.away_team.record}</div>
+                                  )}
                                   {game.away_team_score !== null && (
                                     <div className="text-2xl font-bold mt-1">{game.away_team_score}</div>
                                   )}
@@ -677,11 +680,21 @@ export default function CompetitionDetail() {
                                   <div className="text-xs text-gray-500 font-medium">HOME</div>
                                   <div className="font-semibold text-sm">{game.home_team.city}</div>
                                   <div className="font-bold">{game.home_team.name}</div>
+                                  {game.home_team.record && (
+                                    <div className="text-xs text-gray-500 mt-0.5">{game.home_team.record}</div>
+                                  )}
                                   {game.home_team_score !== null && (
                                     <div className="text-2xl font-bold mt-1">{game.home_team_score}</div>
                                   )}
                                 </div>
                               </div>
+
+                              {/* Head-to-head this season — only shown when games exist between these teams */}
+                              {(game.away_team.h2h_wins > 0 || game.home_team.h2h_wins > 0) && (
+                                <div className="text-xs text-gray-400 mt-2">
+                                  H2H this season: {game.away_team.name} {game.away_team.h2h_wins}–{game.home_team.h2h_wins} {game.home_team.name}
+                                </div>
+                              )}
 
                               {game.venue_name && (
                                 <div className="text-xs text-gray-400 mt-2">

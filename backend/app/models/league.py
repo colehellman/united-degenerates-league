@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, String, Boolean, DateTime, Enum, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -55,6 +55,13 @@ class Team(Base):
     # Logo and colors
     logo_url = Column(String, nullable=True)
     primary_color = Column(String, nullable=True)
+
+    # Season record — updated each sync cycle from the sports API.
+    # Nullable so existing rows and newly-created teams have no record until
+    # the first sync populates the data. Ties are rare but valid (NFL).
+    wins = Column(Integer, nullable=True)
+    losses = Column(Integer, nullable=True)
+    ties = Column(Integer, nullable=True)
 
     # Active status
     is_active = Column(Boolean, default=True, nullable=False)
