@@ -204,6 +204,7 @@ async def test_games_date_filter_respects_utc_offset(
         away_team_id=test_teams[1].id,
         scheduled_start_time=datetime(2026, 3, 9, 2, 0, 0),  # UTC naive
         status=GameStatus.SCHEDULED,
+        spread=-7.5,
     )
     db_session.add(late_evening_game)
     await db_session.commit()
@@ -231,7 +232,13 @@ async def test_games_date_filter_respects_utc_offset(
         params={"date": "2026-03-08", "utc_offset_minutes": 300},
     )
     assert resp.status_code == 200
-    ids_with_offset = [g["id"] for g in resp.json()]
+    games_with_offset = resp.json()
+    ids_with_offset = [g["id"] for g in games_with_offset]
     assert str(late_evening_game.id) in ids_with_offset, (
         "Game MUST appear when EST offset is supplied (9pm ET = 2am UTC on the 9th)"
     )
+    # Check that the spread is correctly serialized in the response
+    game_data = next((g for g in games_with_offset if g['id'] == str(late_evening_game.id)), None)
+    assert game_data is not None
+    assert "spread" in game_data
+    assert game_data["spread"] == -7.5

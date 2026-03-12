@@ -49,6 +49,11 @@ class GameData:
         away_team_wins: Optional[int] = None,
         away_team_losses: Optional[int] = None,
         away_team_ties: Optional[int] = None,
+        # Betting odds sourced from ESPN (DraftKings).
+        # spread is home-team perspective: -3.5 means home favored by 3.5.
+        # None when the API does not supply odds (e.g. pre-season, non-covered leagues).
+        spread: Optional[float] = None,
+        over_under: Optional[float] = None,
     ):
         self.external_id = external_id
         self.home_team = home_team
@@ -69,6 +74,8 @@ class GameData:
         self.away_team_wins = away_team_wins
         self.away_team_losses = away_team_losses
         self.away_team_ties = away_team_ties
+        self.spread = spread
+        self.over_under = over_under
 
 
 class BaseSportsAPIClient(ABC):

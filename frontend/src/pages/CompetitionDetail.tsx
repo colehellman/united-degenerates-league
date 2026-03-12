@@ -683,6 +683,11 @@ export default function CompetitionDetail() {
                                   {game.home_team.record && (
                                     <div className="text-xs text-gray-500 mt-0.5">{game.home_team.record}</div>
                                   )}
+                                  {game.spread !== null && (
+                                    <div className="text-xs text-gray-500 mt-1">
+                                      Spread: {game.spread > 0 ? '+' : ''}{game.spread}
+                                    </div>
+                                  )}
                                   {game.home_team_score !== null && (
                                     <div className="text-2xl font-bold mt-1">{game.home_team_score}</div>
                                   )}

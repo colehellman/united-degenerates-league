@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Enum, ForeignKey, JSON
+from sqlalchemy import Column, String, Integer, Float, DateTime, Enum, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -48,6 +48,12 @@ class Game(Base):
     # Venue
     venue_name = Column(String, nullable=True)
     venue_city = Column(String, nullable=True)
+
+    # Betting odds — sourced from ESPN (DraftKings) on each sync cycle.
+    # spread is from the home team's perspective: negative = home favored.
+    # Both nullable; not all leagues/providers supply odds data.
+    spread = Column(Float, nullable=True)
+    over_under = Column(Float, nullable=True)
 
     # Additional data from API (stored as JSON)
     api_data = Column(JSON, nullable=True)
