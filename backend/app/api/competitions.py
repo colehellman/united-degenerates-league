@@ -548,6 +548,7 @@ async def get_competition_games(
             "away_team_score": game.away_team_score,
             "venue_name": game.venue_name,
             "venue_city": game.venue_city,
+            "spread": game.spread,
         })
 
     return games_response

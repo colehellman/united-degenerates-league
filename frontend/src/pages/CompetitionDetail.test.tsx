@@ -51,17 +51,21 @@ const OPEN_GAME = {
   away_team_score: null,
   home_team_score: null,
   venue_name: null,
+  spread: null,
 }
+
+const GAME_WITH_SPREAD = { ...OPEN_GAME, spread: -7.5 }
+const GAME_WITH_POSITIVE_SPREAD = { ...OPEN_GAME, spread: 3 }
 
 // ---------------------------------------------------------------------------
 // Render helper
 // ---------------------------------------------------------------------------
 
-function renderDetail(competitionData: any) {
+function renderDetail(competitionData: any, gamesData: any[] = [OPEN_GAME]) {
   vi.mocked(api.get).mockImplementation((url: string) => {
     if (url === '/competitions/comp-1') return Promise.resolve({ data: competitionData })
     if (url.includes('/leaderboards/')) return Promise.resolve({ data: [] })
-    if (url.includes('/games')) return Promise.resolve({ data: [OPEN_GAME] })
+    if (url.includes('/games')) return Promise.resolve({ data: gamesData })
     if (url.includes('/my-picks')) return Promise.resolve({ data: [] })
     if (url.includes('/my-fixed-selections')) return Promise.resolve({ data: [] })
     if (url.includes('/available-selections')) return Promise.resolve({ data: { teams: [], golfers: [] } })
@@ -196,5 +200,28 @@ describe('CompetitionDetail — pick cards keyboard accessibility', () => {
     fireEvent.keyDown(awayCard, { key: ' ' })
 
     await screen.findByRole('button', { name: /submit 1 pick/i })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Spread display
+// ---------------------------------------------------------------------------
+
+describe('CompetitionDetail — spread display', () => {
+  it('does not show spread when value is null', async () => {
+    renderDetail(BASE_COMPETITION, [OPEN_GAME])
+    await screen.findByText('Home Team')
+
+    expect(screen.queryByText(/spread:/i)).not.toBeInTheDocument()
+  })
+
+  it('shows negative spread correctly', async () => {
+    renderDetail(BASE_COMPETITION, [GAME_WITH_SPREAD])
+    await screen.findByText(/spread: -7.5/i)
+  })
+
+  it('shows positive spread with a plus sign', async () => {
+    renderDetail(BASE_COMPETITION, [GAME_WITH_POSITIVE_SPREAD])
+    await screen.findByText(/spread: \+3/i)
   })
 })
