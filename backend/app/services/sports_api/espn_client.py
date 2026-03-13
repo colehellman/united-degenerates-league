@@ -205,6 +205,44 @@ class ESPNAPIClient(BaseSportsAPIClient):
             # Venue
             venue = competition.get("venue", {}).get("fullName")
 
+            # Parse betting odds (DraftKings is ESPN's primary provider)
+            spread = None
+            over_under = None
+            odds_list = competition.get("odds", [])
+            if odds_list:
+                # Use the first odds object, or try to find DraftKings
+                odds = odds_list[0]
+                for o in odds_list:
+                    if o.get("provider", {}).get("name", "").lower() == "draftkings":
+                        odds = o
+                        break
+                
+                over_under = odds.get("overUnder")
+                # ESPN spread is a float. It doesn't explicitly state 'home' vs 'away'
+                # perspective in the raw float, but the 'details' string often does.
+                # However, DraftKings odds in the scoreboard API usually follow
+                # the standard: negative = favorite.
+                # We need to ensure we store it from the HOME team's perspective.
+                # If 'details' says "LAL -4.5" and LAL is away, home spread is +4.5.
+                raw_spread = odds.get("spread")
+                details = odds.get("details", "")
+                
+                if raw_spread is not None:
+                    spread = float(raw_spread)
+                    # If the details string mentions the AWAY team's abbreviation
+                    # followed by a negative number (e.g. "AWAY -4.5"), then the
+                    # away team is the favorite, and the HOME spread should be positive.
+                    away_abbr = away_team.get("abbreviation", "")
+                    if away_abbr and details.startswith(away_abbr):
+                        # If the details string starts with away abbreviation and the 
+                        # spread is negative, it means away is favored.
+                        # raw_spread is usually the absolute value of the favorite's spread
+                        # in some API versions, but in others it's already signed.
+                        # Testing shows ESPN's 'spread' field is usually the favorite's spread (negative).
+                        # So if details="AWAY -4.5", spread=-4.5. 
+                        # To get home perspective: if away is -4.5, home is +4.5.
+                        spread = -spread
+
             return GameData(
                 external_id=event.get("id", ""),
                 home_team=home_team["name"],
@@ -228,6 +266,8 @@ class ESPNAPIClient(BaseSportsAPIClient):
                 away_team_wins=away_team["wins"],
                 away_team_losses=away_team["losses"],
                 away_team_ties=away_team["ties"],
+                spread=spread,
+                over_under=over_under,
             )
 
         except Exception as e:

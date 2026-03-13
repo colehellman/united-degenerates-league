@@ -270,3 +270,73 @@ def test_parse_event_non_digit_score_treated_as_none(client: ESPNAPIClient):
     assert result is not None
     assert result.home_score is None
     assert result.away_score is None
+
+
+def test_parse_event_with_odds(client: ESPNAPIClient):
+    """_parse_event correctly extracts spread and overUnder."""
+    event = {
+        "id": "odds_game",
+        "date": "2023-01-01T18:00:00Z",
+        "status": {"type": {"state": "pre"}},
+        "competitions": [
+            {
+                "odds": [
+                    {
+                        "provider": {"name": "DraftKings"},
+                        "details": "KC -4.5",
+                        "overUnder": 48.5,
+                        "spread": -4.5,
+                    }
+                ],
+                "competitors": [
+                    {
+                        "homeAway": "home",
+                        "team": {"id": "1", "displayName": "Chiefs", "abbreviation": "KC"},
+                    },
+                    {
+                        "homeAway": "away",
+                        "team": {"id": "2", "displayName": "Raiders", "abbreviation": "LV"},
+                    },
+                ],
+            }
+        ],
+    }
+    result = client._parse_event(event)
+    assert result is not None
+    assert result.spread == -4.5
+    assert result.over_under == 48.5
+
+
+def test_parse_event_with_away_favorite_odds(client: ESPNAPIClient):
+    """_parse_event correctly inverts the spread if the away team is favored."""
+    event = {
+        "id": "away_fav",
+        "date": "2023-01-01T18:00:00Z",
+        "status": {"type": {"state": "pre"}},
+        "competitions": [
+            {
+                "odds": [
+                    {
+                        "provider": {"name": "DraftKings"},
+                        "details": "LV -3.5",
+                        "spread": -3.5,
+                    }
+                ],
+                "competitors": [
+                    {
+                        "homeAway": "home",
+                        "team": {"id": "1", "displayName": "Chiefs", "abbreviation": "KC"},
+                    },
+                    {
+                        "homeAway": "away",
+                        "team": {"id": "2", "displayName": "Raiders", "abbreviation": "LV"},
+                    },
+                ],
+            }
+        ],
+    }
+    result = client._parse_event(event)
+    assert result is not None
+    # Away favored by 3.5 (-3.5) means Home spread is +3.5
+    assert result.spread == 3.5
+

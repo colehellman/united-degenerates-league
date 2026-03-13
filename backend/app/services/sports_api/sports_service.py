@@ -334,6 +334,14 @@ class SportsDataService:
                 "away_team_external_id": game.away_team_external_id,
                 "home_team_abbreviation": game.home_team_abbreviation,
                 "away_team_abbreviation": game.away_team_abbreviation,
+                "home_team_wins": game.home_team_wins,
+                "home_team_losses": game.home_team_losses,
+                "home_team_ties": game.home_team_ties,
+                "away_team_wins": game.away_team_wins,
+                "away_team_losses": game.away_team_losses,
+                "away_team_ties": game.away_team_ties,
+                "spread": game.spread,
+                "over_under": game.over_under,
             }
             data.append(game_dict)
         return json.dumps(data)
@@ -368,6 +376,14 @@ class SportsDataService:
                     away_team_external_id=game_dict.get("away_team_external_id"),
                     home_team_abbreviation=game_dict.get("home_team_abbreviation"),
                     away_team_abbreviation=game_dict.get("away_team_abbreviation"),
+                    home_team_wins=game_dict.get("home_team_wins"),
+                    home_team_losses=game_dict.get("home_team_losses"),
+                    home_team_ties=game_dict.get("home_team_ties"),
+                    away_team_wins=game_dict.get("away_team_wins"),
+                    away_team_losses=game_dict.get("away_team_losses"),
+                    away_team_ties=game_dict.get("away_team_ties"),
+                    spread=game_dict.get("spread"),
+                    over_under=game_dict.get("over_under"),
                 )
                 games.append(game)
             except Exception as e:
