@@ -1,5 +1,3 @@
-import { Game } from '../types'
-
 export const formatGameTime = (dateString: string) => {
   const date = new Date(dateString)
   return date.toLocaleTimeString([], {
