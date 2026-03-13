@@ -41,7 +41,7 @@ export interface Competition {
   join_type: 'open' | 'requires_approval'
   participant_count: number
   max_participants?: number
-  user_is_participant: bool
+  user_is_participant: boolean
   creator_id?: string
 }
 
