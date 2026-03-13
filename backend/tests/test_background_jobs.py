@@ -6,18 +6,24 @@ from unittest.mock import patch
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.services.background_jobs import (
-    _recalculate_participant_stats,
-    _score_picks_for_game,
+from app.services.score_service import (
+    recalculate_participant_stats as _recalculate_participant_stats,
+    score_picks_for_game as _score_picks_for_game,
+)
+from app.services.sync_service import (
     _find_or_create_team,
     _sync_game_for_competition,
+    sync_games_for_competition,
+)
+from app.services.competition_service import (
     _lock_fixed_team_selections,
-    lock_expired_picks,
-    cleanup_pending_deletions,
     update_competition_statuses,
+)
+from app.services.pick_service import lock_expired_picks
+from app.services.user_service import cleanup_pending_deletions
+from app.services.background_jobs import (
     update_game_scores,
     sync_games_from_api,
-    sync_games_for_competition,
     start_background_jobs,
     stop_background_jobs,
 )
@@ -400,7 +406,8 @@ async def test_lock_expired_picks_via_job(
 
     session_patcher = _make_session_patcher(db_session)
     with patch("app.services.background_jobs.async_session", session_patcher):
-        await lock_expired_picks()
+        await lock_expired_picks(db_session)
+        await db_session.commit()
 
     await db_session.refresh(pick)
     assert pick.is_locked is True
@@ -417,7 +424,8 @@ async def test_cleanup_pending_deletions_via_job(
 
     session_patcher = _make_session_patcher(db_session)
     with patch("app.services.background_jobs.async_session", session_patcher):
-        await cleanup_pending_deletions()
+        await cleanup_pending_deletions(db_session)
+        await db_session.commit()
 
     await db_session.refresh(test_user)
     assert test_user.status == AccountStatus.DELETED
@@ -429,7 +437,8 @@ async def test_cleanup_pending_deletions_no_users(db_session: AsyncSession):
     """cleanup_pending_deletions is a no-op when no users qualify."""
     session_patcher = _make_session_patcher(db_session)
     with patch("app.services.background_jobs.async_session", session_patcher):
-        await cleanup_pending_deletions()  # should not raise
+        await cleanup_pending_deletions(db_session)
+        await db_session.commit()  # should not raise
 
 
 @pytest.mark.asyncio
@@ -458,7 +467,8 @@ async def test_update_competition_statuses_upcoming_to_active(
 
     session_patcher = _make_session_patcher(db_session)
     with patch("app.services.background_jobs.async_session", session_patcher):
-        await update_competition_statuses()
+        await update_competition_statuses(db_session)
+        await db_session.commit()
 
     await db_session.refresh(comp)
     assert comp.status == CompetitionStatus.ACTIVE
@@ -634,7 +644,8 @@ async def test_update_competition_statuses_active_to_completed(
 
     session_patcher = _make_session_patcher(db_session)
     with patch("app.services.background_jobs.async_session", session_patcher):
-        await update_competition_statuses()
+        await update_competition_statuses(db_session)
+        await db_session.commit()
 
     await db_session.refresh(comp)
     assert comp.status == CompetitionStatus.COMPLETED
@@ -680,7 +691,8 @@ async def test_lock_expired_picks_no_started_games(db_session: AsyncSession):
     """lock_expired_picks exits early when no games have started."""
     session_patcher = _make_session_patcher(db_session)
     with patch("app.services.background_jobs.async_session", session_patcher):
-        await lock_expired_picks()  # should not raise (no started games → early return)
+        await lock_expired_picks(db_session)
+        await db_session.commit()  # should not raise (no started games → early return)
 
 
 @pytest.mark.asyncio
@@ -721,7 +733,8 @@ async def test_update_competition_statuses_games_still_in_progress(
 
     session_patcher = _make_session_patcher(db_session)
     with patch("app.services.background_jobs.async_session", session_patcher):
-        await update_competition_statuses()
+        await update_competition_statuses(db_session)
+        await db_session.commit()
 
     await db_session.refresh(comp)
     assert comp.status == CompetitionStatus.ACTIVE  # not completed yet
@@ -892,24 +905,27 @@ def _make_failing_session(error=None):
 
 
 @pytest.mark.asyncio
-async def test_lock_expired_picks_db_error():
+async def test_lock_expired_picks_db_error(db_session: AsyncSession):
     """lock_expired_picks handles DB errors gracefully without raising."""
     with patch("app.services.background_jobs.async_session", _make_failing_session()):
-        await lock_expired_picks()  # should not raise
+        await lock_expired_picks(db_session)
+        await db_session.commit()  # should not raise
 
 
 @pytest.mark.asyncio
-async def test_cleanup_pending_deletions_db_error():
+async def test_cleanup_pending_deletions_db_error(db_session: AsyncSession):
     """cleanup_pending_deletions handles DB errors gracefully without raising."""
     with patch("app.services.background_jobs.async_session", _make_failing_session()):
-        await cleanup_pending_deletions()  # should not raise
+        await cleanup_pending_deletions(db_session)
+        await db_session.commit()  # should not raise
 
 
 @pytest.mark.asyncio
-async def test_update_competition_statuses_db_error():
+async def test_update_competition_statuses_db_error(db_session: AsyncSession):
     """update_competition_statuses handles DB errors gracefully without raising."""
     with patch("app.services.background_jobs.async_session", _make_failing_session()):
-        await update_competition_statuses()  # should not raise
+        await update_competition_statuses(db_session)
+        await db_session.commit()  # should not raise
 
 
 @pytest.mark.asyncio
@@ -934,7 +950,8 @@ async def test_sync_games_for_competition_not_found(db_session: AsyncSession):
     """Returns a 'not found' message for a non-existent competition id."""
     session_patcher = _make_session_patcher(db_session)
     with patch("app.services.background_jobs.async_session", session_patcher):
-        result = await sync_games_for_competition("00000000-0000-0000-0000-000000000000")
+        result = await sync_games_for_competition(db_session, "00000000-0000-0000-0000-000000000000")
+        await db_session.commit()
 
     assert result["created"] == 0
     assert result["updated"] == 0
@@ -955,7 +972,8 @@ async def test_sync_games_for_competition_no_games_from_espn(
              "app.services.background_jobs.sports_service.get_schedule",
              new=AsyncMock(return_value=[]),
          ):
-        result = await sync_games_for_competition(str(active_competition.id))
+        result = await sync_games_for_competition(db_session, str(active_competition.id))
+        await db_session.commit()
 
     assert result["created"] == 0
     assert result["updated"] == 0
@@ -991,7 +1009,8 @@ async def test_sync_games_for_competition_creates_games(
              "app.services.background_jobs.sports_service.get_schedule",
              new=AsyncMock(return_value=[mock_game]),
          ):
-        result = await sync_games_for_competition(str(active_competition.id))
+        result = await sync_games_for_competition(db_session, str(active_competition.id))
+        await db_session.commit()
 
     assert result["created"] >= 1
     # Verify a game landed in the DB for this competition

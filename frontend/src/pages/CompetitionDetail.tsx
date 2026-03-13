@@ -3,6 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api from '../services/api'
+import GameCard from '../components/GameCard'
+import Leaderboard from '../components/Leaderboard'
+import { isGameLocked, formatDate } from '../utils/format'
 
 interface Pick {
   game_id: string
@@ -320,49 +323,6 @@ export default function CompetitionDetail() {
     submitFixedSelectionsMutation.mutate(selections)
   }
 
-  const getGameStatusBadge = (game: any) => {
-    const now = new Date()
-    const startTime = new Date(game.scheduled_start_time)
-    const isLocked = startTime <= now || game.status === 'in_progress' || game.status === 'final'
-
-    if (game.status === 'final') {
-      return <span className="badge badge-final">FINAL</span>
-    } else if (game.status === 'in_progress') {
-      return <span className="badge badge-in-progress">LIVE</span>
-    } else if (isLocked) {
-      return <span className="badge" style={{ backgroundColor: '#9CA3AF', color: 'white' }}>LOCKED</span>
-    } else {
-      return <span className="badge badge-open">OPEN</span>
-    }
-  }
-
-  const isGameLocked = (game: any) => {
-    const now = new Date()
-    const startTime = new Date(game.scheduled_start_time)
-    return startTime <= now || game.status === 'in_progress' || game.status === 'final'
-  }
-
-  const formatGameTime = (isoString: string) => {
-    const date = new Date(isoString)
-    return date.toLocaleString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZoneName: 'short',
-    })
-  }
-
-  const formatDate = (isoString: string) => {
-    if (!isoString) return '—'
-    return new Date(isoString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }
-
   const getPicksCount = () => {
     return Object.keys(picks).length
   }
@@ -508,46 +468,7 @@ export default function CompetitionDetail() {
           {/* Leaderboard */}
           <div className="card">
             <h2 className="text-2xl font-bold mb-4">Leaderboard</h2>
-            {leaderboardLoading ? (
-              <p>Loading leaderboard...</p>
-            ) : leaderboard && leaderboard.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-semibold">Rank</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold">Username</th>
-                      <th className="px-4 py-3 text-right text-sm font-semibold">Points</th>
-                      <th className="px-4 py-3 text-right text-sm font-semibold">Wins</th>
-                      <th className="px-4 py-3 text-right text-sm font-semibold">Accuracy</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {leaderboard.map((entry: any) => (
-                      <tr
-                        key={entry.user_id}
-                        className={entry.is_current_user ? 'bg-primary-50 font-medium' : ''}
-                      >
-                        <td className="px-4 py-3 text-sm">{entry.rank}</td>
-                        <td className="px-4 py-3 text-sm">
-                          {entry.username}
-                          {entry.is_current_user && (
-                            <span className="ml-2 text-primary-600">(You)</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right">{entry.total_points}</td>
-                        <td className="px-4 py-3 text-sm text-right">{entry.total_wins}</td>
-                        <td className="px-4 py-3 text-sm text-right">
-                          {entry.accuracy_percentage.toFixed(1)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-gray-600">No participants yet.</p>
-            )}
+            <Leaderboard entries={leaderboard} isLoading={leaderboardLoading} />
           </div>
 
           {/* Daily Picks Mode */}
@@ -601,119 +522,14 @@ export default function CompetitionDetail() {
                       )}
 
                       <div className="space-y-4 mb-6">
-                        {displayGames.map((game: any) => {
-                          const locked = isGameLocked(game)
-                          const userPick = picks[game.id]
-
-                          // Helper for team card styling.
-                          // Locked + picked → full highlight so the user clearly sees their selection.
-                          // Locked + not picked → subdued, since it's informational only.
-                          // Open → standard interactive style.
-                          const teamCardClass = (teamId: string) => {
-                            if (!locked) {
-                              return userPick === teamId
-                                ? 'border-primary-500 bg-primary-50 cursor-pointer'
-                                : 'border-gray-200 hover:border-primary-300 cursor-pointer'
-                            }
-                            if (userPick === teamId) {
-                              return 'border-primary-500 bg-primary-50 cursor-default'
-                            }
-                            return 'border-gray-100 bg-gray-50 opacity-40 cursor-default'
-                          }
-
-                          return (
-                            <div
-                              key={game.id}
-                              className={`border rounded-lg p-4 ${locked ? 'bg-gray-50' : 'bg-white'}`}
-                            >
-                              <div className="flex justify-between items-center mb-3">
-                                <div className="text-sm text-gray-600">
-                                  {formatGameTime(game.scheduled_start_time)}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {locked && userPick && (
-                                    <span className="text-xs font-semibold text-primary-600 uppercase tracking-wide">
-                                      Your pick
-                                    </span>
-                                  )}
-                                  {getGameStatusBadge(game)}
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-3">
-                                {/* Away Team — div instead of label+radio so clicking a selected team deselects it */}
-                                <div
-                                  role="button"
-                                  tabIndex={locked ? undefined : 0}
-                                  onClick={() => !locked && handlePickChange(game.id, game.away_team.id)}
-                                  onKeyDown={(e) => {
-                                    if (!locked && (e.key === 'Enter' || e.key === ' ')) {
-                                      e.preventDefault()
-                                      handlePickChange(game.id, game.away_team.id)
-                                    }
-                                  }}
-                                  className={`border rounded-lg p-3 transition select-none ${teamCardClass(game.away_team.id)}`}
-                                >
-                                  <div className="font-semibold text-sm">{game.away_team.city}</div>
-                                  <div className="font-bold">{game.away_team.name}</div>
-                                  {game.away_team.record && (
-                                    <div className="text-xs text-gray-500 mt-0.5">{game.away_team.record}</div>
-                                  )}
-                                  {game.spread !== null && (
-                                    <div className="text-xs text-gray-500 mt-0.5">
-                                      Spread: {game.spread < 0 ? '+' : '-'}{Math.abs(game.spread)}
-                                    </div>
-                                  )}
-                                  {game.away_team_score !== null && (
-                                    <div className="text-2xl font-bold mt-1">{game.away_team_score}</div>
-                                  )}
-                                </div>
-
-                                {/* Home Team */}
-                                <div
-                                  role="button"
-                                  tabIndex={locked ? undefined : 0}
-                                  onClick={() => !locked && handlePickChange(game.id, game.home_team.id)}
-                                  onKeyDown={(e) => {
-                                    if (!locked && (e.key === 'Enter' || e.key === ' ')) {
-                                      e.preventDefault()
-                                      handlePickChange(game.id, game.home_team.id)
-                                    }
-                                  }}
-                                  className={`border rounded-lg p-3 transition select-none ${teamCardClass(game.home_team.id)}`}
-                                >
-                                  <div className="text-xs text-gray-500 font-medium">HOME</div>
-                                  <div className="font-semibold text-sm">{game.home_team.city}</div>
-                                  <div className="font-bold">{game.home_team.name}</div>
-                                  {game.home_team.record && (
-                                    <div className="text-xs text-gray-500 mt-0.5">{game.home_team.record}</div>
-                                  )}
-                                  {game.spread !== null && (
-                                    <div className="text-xs text-gray-500 mt-0.5">
-                                      Spread: {game.spread > 0 ? '+' : ''}{game.spread}
-                                    </div>
-                                  )}
-                                  {game.home_team_score !== null && (
-                                    <div className="text-2xl font-bold mt-1">{game.home_team_score}</div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Head-to-head this season — only shown when games exist between these teams */}
-                              {(game.away_team.h2h_wins > 0 || game.home_team.h2h_wins > 0) && (
-                                <div className="text-xs text-gray-400 mt-2">
-                                  H2H this season: {game.away_team.name} {game.away_team.h2h_wins}–{game.home_team.h2h_wins} {game.home_team.name}
-                                </div>
-                              )}
-
-                              {game.venue_name && (
-                                <div className="text-xs text-gray-400 mt-2">
-                                  @ {game.venue_name}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
+                        {displayGames.map((game: any) => (
+                          <GameCard
+                            key={game.id}
+                            game={game}
+                            userPick={picks[game.id]}
+                            onPickChange={handlePickChange}
+                          />
+                        ))}
                       </div>
 
                       {/* Submit / Update button — shown while any game is still open */}

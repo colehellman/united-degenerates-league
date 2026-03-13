@@ -132,15 +132,21 @@ async def create_daily_picks_batch(
                 detail=f"Daily pick limit ({competition.max_picks_per_day}) exceeded.",
             )
 
+    # Pre-fetch all games in the batch
+    game_ids = [pick_item.game_id for pick_item in pick_data.picks]
+    games_by_id = {}
+    if game_ids:
+        games_result = await db.execute(
+            select(Game).where(Game.id.in_(game_ids))
+        )
+        for g in games_result.scalars().all():
+            games_by_id[str(g.id)] = g
+
     created_picks = []
 
     # Process each pick in the batch
     for pick_item in pick_data.picks:
-        # Get game
-        game_result = await db.execute(
-            select(Game).where(Game.id == pick_item.game_id)
-        )
-        game = game_result.scalar_one_or_none()
+        game = games_by_id.get(str(pick_item.game_id))
 
         if not game:
             raise HTTPException(

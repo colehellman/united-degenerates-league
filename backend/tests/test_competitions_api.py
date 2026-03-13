@@ -106,7 +106,7 @@ async def test_sync_competition_games_admin_success(
 
     # Patch at the source module so the local import inside the endpoint resolves to the mock.
     with patch(
-        "app.services.background_jobs.sync_games_for_competition",
+        "app.services.sync_service.sync_games_for_competition",
         new=AsyncMock(return_value=mock_result),
     ):
         resp = await client.post(

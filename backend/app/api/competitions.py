@@ -111,8 +111,8 @@ async def create_competition(
     # We fire-and-forget with a bare except so a transient ESPN outage never
     # prevents the 201 from reaching the client.
     try:
-        from app.services.background_jobs import sync_games_for_competition
-        await sync_games_for_competition(str(competition.id))
+        from app.services.sync_service import sync_games_for_competition
+        await sync_games_for_competition(db, str(competition.id))
     except Exception:
         pass  # Non-critical; the scheduled job and admin sync button are fallbacks
 
@@ -149,30 +149,62 @@ async def list_competitions(
             )
         )
 
+    # Subquery for participant counts
+    participant_counts_subquery = (
+        select(
+            Participant.competition_id,
+            func.count(Participant.id).label("participant_count")
+        )
+        .group_by(Participant.competition_id)
+        .subquery()
+    )
+
+    # Subquery to check if the current user is a participant
+    user_participant_subquery = (
+        select(Participant.competition_id)
+        .where(Participant.user_id == current_user.id)
+        .subquery()
+    )
+
+    # Main query joining with subqueries
+    query = (
+        select(
+            Competition,
+            func.coalesce(participant_counts_subquery.c.participant_count, 0).label("participant_count"),
+            user_participant_subquery.c.competition_id.is_not(None).label("is_participant")
+        )
+        .outerjoin(
+            participant_counts_subquery,
+            Competition.id == participant_counts_subquery.c.competition_id
+        )
+        .outerjoin(
+            user_participant_subquery,
+            Competition.id == user_participant_subquery.c.competition_id
+        )
+    )
+
+    # Filter by status if provided
+    if status_filter:
+        query = query.where(Competition.status == status_filter)
+
+    # Filter by visibility
+    if visibility:
+        query = query.where(Competition.visibility == visibility)
+    else:
+        # Show public competitions and private ones where user is a participant OR creator
+        query = query.where(
+            or_(
+                Competition.visibility == Visibility.PUBLIC,
+                user_participant_subquery.c.competition_id.is_not(None),
+                Competition.creator_id == current_user.id
+            )
+        )
+
     result = await db.execute(query)
-    competitions = result.scalars().all()
+    rows = result.all()
 
-    # Get participant counts
     response_list = []
-    for comp in competitions:
-        count_result = await db.execute(
-            select(func.count(Participant.id)).where(
-                Participant.competition_id == comp.id
-            )
-        )
-        participant_count = count_result.scalar()
-
-        # Check if user is participant
-        participant_result = await db.execute(
-            select(Participant).where(
-                and_(
-                    Participant.competition_id == comp.id,
-                    Participant.user_id == current_user.id,
-                )
-            )
-        )
-        is_participant = participant_result.scalar_one_or_none() is not None
-
+    for comp, participant_count, is_participant in rows:
         comp_response = CompetitionListResponse(
             **{k: getattr(comp, k) for k in CompetitionListResponse.model_fields.keys() if k != 'participant_count' and k != 'user_is_participant'},
             participant_count=participant_count,
@@ -471,6 +503,23 @@ async def get_competition_games(
         for t in team_result.scalars().all():
             teams_by_id[t.id] = t
 
+    # Pre-fetch H2H games for all team pairs in one query to avoid N+1.
+    # We fetch all finished games this season that involve any of the teams
+    # playing in today's games.
+    h2h_games_all = []
+    if team_ids:
+        h2h_all_result = await db.execute(
+            select(Game).where(
+                and_(
+                    Game.winner_team_id.is_not(None),
+                    Game.scheduled_start_time >= h2h_season_start,
+                    Game.home_team_id.in_(list(team_ids)),
+                    Game.away_team_id.in_(list(team_ids))
+                )
+            )
+        )
+        h2h_games_all = h2h_all_result.scalars().all()
+
     # Convert to response format with team details
     games_response = []
     for game in games:
@@ -480,30 +529,13 @@ async def get_competition_games(
         if not home_team or not away_team:
             continue
 
-        # Head-to-head record: finished games in any competition this season
-        # between these two specific teams, from the home team's perspective.
-        # Use _season_start() so cross-year leagues (NBA Oct-Jun, NHL Oct-Jun,
-        # NFL Sep-Feb, EPL Aug-May) include games from the prior calendar year
-        # rather than resetting the window at January 1.
-        h2h_result = await db.execute(
-            select(Game).where(
-                and_(
-                    Game.winner_team_id.is_not(None),
-                    Game.scheduled_start_time >= h2h_season_start,
-                    or_(
-                        and_(
-                            Game.home_team_id == home_team.id,
-                            Game.away_team_id == away_team.id,
-                        ),
-                        and_(
-                            Game.home_team_id == away_team.id,
-                            Game.away_team_id == home_team.id,
-                        ),
-                    ),
-                )
-            )
-        )
-        h2h_games = h2h_result.scalars().all()
+        # Filter pre-fetched H2H games for this specific pair
+        h2h_games = [
+            g for g in h2h_games_all
+            if (g.home_team_id == home_team.id and g.away_team_id == away_team.id) or
+               (g.home_team_id == away_team.id and g.away_team_id == home_team.id)
+        ]
+        
         h2h_home_wins = sum(1 for g in h2h_games if g.winner_team_id == home_team.id)
         h2h_away_wins = sum(1 for g in h2h_games if g.winner_team_id == away_team.id)
 
@@ -587,11 +619,13 @@ async def sync_competition_games(
             detail="Competition admin access required",
         )
 
-    from app.services.background_jobs import sync_games_for_competition
+    from app.services.sync_service import sync_games_for_competition
 
     try:
-        sync_result = await sync_games_for_competition(competition_id)
+        sync_result = await sync_games_for_competition(db, competition_id)
+        await db.commit()
     except Exception as exc:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"ESPN sync failed: {str(exc)}",
