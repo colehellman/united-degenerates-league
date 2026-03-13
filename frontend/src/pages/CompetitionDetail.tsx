@@ -659,6 +659,11 @@ export default function CompetitionDetail() {
                                   {game.away_team.record && (
                                     <div className="text-xs text-gray-500 mt-0.5">{game.away_team.record}</div>
                                   )}
+                                  {game.spread !== null && (
+                                    <div className="text-xs text-gray-500 mt-0.5">
+                                      Spread: {game.spread < 0 ? '+' : '-'}{Math.abs(game.spread)}
+                                    </div>
+                                  )}
                                   {game.away_team_score !== null && (
                                     <div className="text-2xl font-bold mt-1">{game.away_team_score}</div>
                                   )}
@@ -684,7 +689,7 @@ export default function CompetitionDetail() {
                                     <div className="text-xs text-gray-500 mt-0.5">{game.home_team.record}</div>
                                   )}
                                   {game.spread !== null && (
-                                    <div className="text-xs text-gray-500 mt-1">
+                                    <div className="text-xs text-gray-500 mt-0.5">
                                       Spread: {game.spread > 0 ? '+' : ''}{game.spread}
                                     </div>
                                   )}

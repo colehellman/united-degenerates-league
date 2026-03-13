@@ -203,6 +203,13 @@ async def update_game_scores():
                         game.status = GameStatus(score_data.status)
                         game.home_team_score = score_data.home_score
                         game.away_team_score = score_data.away_score
+                        
+                        # Update odds (spread/over_under) during each score sync
+                        # so they are available even for games that just started.
+                        if score_data.spread is not None:
+                            game.spread = score_data.spread
+                        if score_data.over_under is not None:
+                            game.over_under = score_data.over_under
 
                         # Determine winner (NULL for ties, cancelled, or no result)
                         if game.status == GameStatus.FINAL:
@@ -791,6 +798,13 @@ async def _sync_game_for_competition(
         existing_game.status = new_status
         existing_game.home_team_score = game_data.home_score
         existing_game.away_team_score = game_data.away_score
+        
+        # Always update odds (spread/over_under) if available
+        if game_data.spread is not None:
+            existing_game.spread = game_data.spread
+        if game_data.over_under is not None:
+            existing_game.over_under = game_data.over_under
+            
         existing_game.updated_at = datetime.utcnow()
 
         # Determine winner when game becomes final
@@ -836,6 +850,8 @@ async def _sync_game_for_competition(
             home_team_score=game_data.home_score,
             away_team_score=game_data.away_score,
             venue_name=game_data.venue,
+            spread=game_data.spread,
+            over_under=game_data.over_under,
         )
         db.add(game)
         return (1, 0)
