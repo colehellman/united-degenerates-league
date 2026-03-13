@@ -299,8 +299,8 @@ async def test_pick_locking(db_session: AsyncSession, test_user: User, active_co
     assert pick.is_locked is False
 
     # Simulate background job locking picks
-    from app.services.background_jobs import lock_expired_picks
-    await lock_expired_picks()
+    from app.services.pick_service import lock_expired_picks
+    await lock_expired_picks(db_session)
 
     # Refresh pick — it must be locked since the game start time has passed
     await db_session.refresh(pick)
@@ -351,8 +351,8 @@ async def test_pick_scoring(db_session: AsyncSession, test_user: User, active_co
     await db_session.refresh(pick_correct)
 
     # Simulate background job scoring picks
-    from app.services.background_jobs import _score_picks_for_game
-    await _score_picks_for_game(db_session, game)
+    from app.services.score_service import score_picks_for_game
+    await score_picks_for_game(db_session, game)
 
     # Refresh pick
     await db_session.refresh(pick_correct)
@@ -437,8 +437,8 @@ async def test_competition_status_transition(db_session: AsyncSession, test_user
     assert competition.status == CompetitionStatus.UPCOMING
 
     # Simulate background job updating statuses
-    from app.services.background_jobs import update_competition_statuses
-    await update_competition_statuses()
+    from app.services.competition_service import update_competition_statuses
+    await update_competition_statuses(db_session)
 
     # Refresh competition
     await db_session.refresh(competition)
@@ -598,8 +598,9 @@ async def test_cleanup_pending_deletions(db_session: AsyncSession):
     await db_session.refresh(old_user)
     await db_session.refresh(recent_user)
 
-    from app.services.background_jobs import cleanup_pending_deletions
-    await cleanup_pending_deletions()
+    from app.services.user_service import cleanup_pending_deletions
+    await cleanup_pending_deletions(db_session)
+    await db_session.commit()
 
     await db_session.refresh(old_user)
     await db_session.refresh(recent_user)
