@@ -15,15 +15,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add new values to accountstatus enum
-    op.execute("ALTER TYPE accountstatus ADD VALUE IF NOT EXISTS 'suspended'")
-    op.execute("ALTER TYPE accountstatus ADD VALUE IF NOT EXISTS 'banned'")
+    # Add new values to accountstatus enum (uppercase to match initial migration)
+    op.execute("ALTER TYPE accountstatus ADD VALUE IF NOT EXISTS 'SUSPENDED'")
+    op.execute("ALTER TYPE accountstatus ADD VALUE IF NOT EXISTS 'BANNED'")
 
-    # Add new values to auditaction enum
-    op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'participant_removed'")
-    op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'user_suspended'")
-    op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'user_banned'")
-    op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'user_reactivated'")
+    # Add new values to auditaction enum (uppercase to match initial migration)
+    op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'PARTICIPANT_REMOVED'")
+    op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'USER_SUSPENDED'")
+    op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'USER_BANNED'")
+    op.execute("ALTER TYPE auditaction ADD VALUE IF NOT EXISTS 'USER_REACTIVATED'")
 
 
 def downgrade() -> None:

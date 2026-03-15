@@ -87,11 +87,17 @@ async def test_update_user_status_reactivate(
 ):
     """Global admin can reactivate a suspended user."""
     await _make_global_admin(db_session, test_user)
-    second_user.status = AccountStatus.SUSPENDED
-    await db_session.commit()
-
     token = await _login(client)
 
+    # First suspend the user via the API
+    resp = await client.patch(
+        f"/api/admin/users/{second_user.id}/status",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"status": "suspended", "reason": "temp"},
+    )
+    assert resp.status_code == 200
+
+    # Now reactivate
     resp = await client.patch(
         f"/api/admin/users/{second_user.id}/status",
         headers={"Authorization": f"Bearer {token}"},
@@ -665,15 +671,20 @@ async def test_add_competition_admin_already_admin(
 async def test_add_competition_admin_user_not_found(
     client: AsyncClient,
     test_user: User,
+    second_user: User,
     active_competition: Competition,
+    db_session: AsyncSession,
 ):
     """404 when user to be added doesn't exist."""
     token = await _login(client)
 
+    # Use a valid UUID4 that doesn't match any existing user
+    import uuid
+    fake_user_id = str(uuid.uuid4())
     resp = await client.post(
         f"/api/admin/competitions/{active_competition.id}/admins",
         headers={"Authorization": f"Bearer {token}"},
-        json={"user_id": "00000000-0000-0000-0000-000000000000"},
+        json={"user_id": fake_user_id},
     )
     assert resp.status_code == 404
 

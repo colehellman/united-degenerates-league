@@ -104,7 +104,7 @@ async def update_user_status(
     # Revoke all tokens for suspended/banned users
     if update.status in (AccountStatus.SUSPENDED, AccountStatus.BANNED):
         from app.services.token_blacklist import blacklist_all_user_tokens
-        await blacklist_all_user_tokens(str(target_user.id))
+        blacklist_all_user_tokens(str(target_user.id))
 
     await db.commit()
     await db.refresh(target_user)
