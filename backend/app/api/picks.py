@@ -56,14 +56,19 @@ async def create_daily_picks_batch(
             detail="Competition not found or not in Daily Picks mode",
         )
 
-    # Verify user is participant
+    # Verify user is participant and lock the row to serialize concurrent pick
+    # submissions for the same user+competition.  Without this lock two
+    # requests that both pass the max_picks_per_day check in parallel can
+    # over-submit picks before either commits.
     participant_result = await db.execute(
-        select(Participant).where(
+        select(Participant)
+        .where(
             and_(
                 Participant.competition_id == competition.id,
                 Participant.user_id == current_user.id,
             )
         )
+        .with_for_update()
     )
     participant = participant_result.scalar_one_or_none()
     if not participant:
