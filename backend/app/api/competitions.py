@@ -12,6 +12,7 @@ from app.models.participant import Participant, JoinRequest, JoinRequestStatus
 from app.models.game import Game
 from app.models.league import Team, Golfer, League
 from app.models.pick import FixedTeamSelection
+from app.models.audit_log import AuditLog, AuditAction
 from app.schemas.competition import (
     CompetitionCreate,
     CompetitionResponse,
@@ -90,6 +91,14 @@ async def create_competition(
     db.add(competition)
     await db.commit()
     await db.refresh(competition)
+
+    db.add(AuditLog(
+        admin_user_id=current_user.id,
+        action=AuditAction.COMPETITION_CREATED,
+        target_type="competition",
+        target_id=competition.id,
+        details={"name": competition.name, "mode": competition.mode.value},
+    ))
 
     # Automatically add creator as participant
     participant = Participant(
@@ -297,11 +306,27 @@ async def update_competition(
             detail="Only competition admins can update competitions",
         )
 
-    # Update fields
-    for field, value in update_data.model_dump(exclude_unset=True).items():
+    # Capture changed fields for audit log
+    changes = update_data.model_dump(exclude_unset=True)
+    old_values = {field: getattr(competition, field) for field in changes}
+
+    for field, value in changes.items():
         setattr(competition, field, value)
 
     competition.updated_at = datetime.utcnow()
+
+    db.add(AuditLog(
+        admin_user_id=current_user.id,
+        action=AuditAction.COMPETITION_SETTINGS_CHANGED,
+        target_type="competition",
+        target_id=competition.id,
+        details={
+            "changed_fields": list(changes.keys()),
+            "old_values": {k: str(v) for k, v in old_values.items()},
+            "new_values": {k: str(v) for k, v in changes.items()},
+        },
+    ))
+
     await db.commit()
     await db.refresh(competition)
 
@@ -325,6 +350,18 @@ async def delete_competition(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Competition not found",
         )
+
+    db.add(AuditLog(
+        admin_user_id=current_user.id,
+        action=AuditAction.COMPETITION_DELETED,
+        target_type="competition",
+        target_id=competition.id,
+        details={
+            "name": competition.name,
+            "status": competition.status.value,
+            "creator_id": str(competition.creator_id),
+        },
+    ))
 
     await db.delete(competition)
     await db.commit()

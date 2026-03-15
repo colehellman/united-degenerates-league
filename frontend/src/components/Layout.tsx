@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../services/authStore'
 import BugReportModal from './BugReportModal'
@@ -10,6 +10,11 @@ export default function Layout() {
   const location = useLocation()
 
   const closeMobileMenu = () => setMobileMenuOpen(false)
+
+  // Close mobile menu on any route change (covers programmatic navigation)
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [location.pathname])
 
   // Exact match for '/' (Dashboard) so it doesn't highlight on every sub-route.
   // All other links use startsWith so /competitions/123 keeps Competitions active.

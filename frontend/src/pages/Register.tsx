@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../services/authStore'
 
@@ -13,6 +13,15 @@ export default function Register() {
   const { register } = useAuthStore()
   const navigate = useNavigate()
 
+  const passwordChecks = useMemo(() => ({
+    length: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    digit: /\d/.test(password),
+    special: /[!@#$%^&*()\-_=+[\]{}|;:',.<>?/`~]/.test(password),
+  }), [password])
+
+  const passwordValid = passwordChecks.length && passwordChecks.uppercase && passwordChecks.digit && passwordChecks.special
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -22,8 +31,8 @@ export default function Register() {
       return
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters')
+    if (!passwordValid) {
+      setError('Password does not meet all requirements')
       return
     }
 
@@ -39,6 +48,9 @@ export default function Register() {
     }
   }
 
+  const checkClass = (met: boolean) =>
+    met ? 'text-green-600' : 'text-gray-400'
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -52,9 +64,9 @@ export default function Register() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="card">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                 {error}
               </div>
             )}
@@ -70,6 +82,8 @@ export default function Register() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input mt-1"
+                placeholder="you@example.com"
+                autoComplete="email"
               />
             </div>
 
@@ -82,9 +96,12 @@ export default function Register() {
                 type="text"
                 required
                 minLength={3}
+                maxLength={50}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="input mt-1"
+                placeholder="3–50 characters"
+                autoComplete="username"
               />
             </div>
 
@@ -96,11 +113,27 @@ export default function Register() {
                 id="password"
                 type="password"
                 required
-                minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input mt-1"
+                autoComplete="new-password"
               />
+              {password.length > 0 && (
+                <ul className="mt-2 space-y-0.5 text-xs">
+                  <li className={checkClass(passwordChecks.length)}>
+                    {passwordChecks.length ? '✓' : '○'} At least 8 characters
+                  </li>
+                  <li className={checkClass(passwordChecks.uppercase)}>
+                    {passwordChecks.uppercase ? '✓' : '○'} One uppercase letter
+                  </li>
+                  <li className={checkClass(passwordChecks.digit)}>
+                    {passwordChecks.digit ? '✓' : '○'} One digit
+                  </li>
+                  <li className={checkClass(passwordChecks.special)}>
+                    {passwordChecks.special ? '✓' : '○'} One special character
+                  </li>
+                </ul>
+              )}
             </div>
 
             <div>
@@ -114,12 +147,16 @@ export default function Register() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="input mt-1"
+                autoComplete="new-password"
               />
+              {confirmPassword.length > 0 && password !== confirmPassword && (
+                <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+              )}
             </div>
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !passwordValid}
               className="btn btn-primary w-full"
             >
               {loading ? 'Creating account...' : 'Sign up'}

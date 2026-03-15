@@ -10,12 +10,17 @@ from app.db.session import Base
 
 class UserRole(str, enum.Enum):
     USER = "user"
+    # LEAGUE_ADMIN is unused — competition-level admin is handled via
+    # Competition.league_admin_ids (per-competition array). Kept for DB
+    # compatibility but never assigned or checked anywhere.
     LEAGUE_ADMIN = "league_admin"
     GLOBAL_ADMIN = "global_admin"
 
 
 class AccountStatus(str, enum.Enum):
     ACTIVE = "active"
+    SUSPENDED = "suspended"
+    BANNED = "banned"
     PENDING_DELETION = "pending_deletion"
     DELETED = "deleted"
 

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '../services/api'
+import Spinner from '../components/Spinner'
 import { extractErrorMessage } from '../utils/errors'
 
 interface League {
@@ -102,7 +103,7 @@ export default function CreateCompetition() {
   }
 
   if (leaguesLoading) {
-    return <div className="text-center py-8">Loading...</div>
+    return <Spinner />
   }
 
   return (
@@ -187,7 +188,7 @@ export default function CreateCompetition() {
           </div>
 
           {/* Dates */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">
                 Start Date
@@ -218,7 +219,7 @@ export default function CreateCompetition() {
           </div>
 
           {/* Visibility & Join Type */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="visibility" className="block text-sm font-medium text-gray-700">
                 Visibility
