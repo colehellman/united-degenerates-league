@@ -171,7 +171,6 @@ udl/
 │   ├── vitest.config.ts
 │   ├── tailwind.config.js
 │   └── tsconfig.json
-├── docs/                        # Project documentation
 ├── mcp_server/                  # MCP server for Playwright integration
 ├── docker-compose.yml
 └── README.md
@@ -187,6 +186,8 @@ Key models:
 - **Game**: Individual games/matches
 - **Pick**: Daily picks for games
 - **FixedTeamSelection**: Pre-season team/golfer selections
+- **Golfer**: PGA golfers within a league
+- **BugReport**: User-submitted bug reports
 - **Participant**: User participation in competitions
 - **JoinRequest**: Join requests for private competitions
 - **AuditLog**: Immutable audit trail of admin actions
@@ -196,12 +197,18 @@ Key models:
 ### Authentication
 - `POST /api/auth/register` - Register new user
 - `POST /api/auth/login` - Login
+- `POST /api/auth/refresh` - Refresh access token
+- `POST /api/auth/logout` - Logout
 
 ### Users
 - `GET /api/users/me` - Get current user profile
 - `PATCH /api/users/me` - Update user profile
 - `POST /api/users/me/change-password` - Change password
 - `DELETE /api/users/me` - Request account deletion
+- `POST /api/users/me/cancel-deletion` - Cancel pending account deletion
+
+### Leagues
+- `GET /api/leagues` - List available leagues
 
 ### Competitions
 - `POST /api/competitions` - Create competition
@@ -210,21 +217,41 @@ Key models:
 - `PATCH /api/competitions/{id}` - Update competition (admins only)
 - `DELETE /api/competitions/{id}` - Delete competition (global admins only)
 - `POST /api/competitions/{id}/join` - Join competition
+- `GET /api/competitions/{id}/games` - List games for competition
+- `POST /api/competitions/{id}/sync-games` - Sync games from API
+- `GET /api/competitions/{id}/available-selections` - Get available team/golfer selections
 
 ### Picks
-- `POST /api/picks/{competition_id}/daily` - Submit daily pick
-- `GET /api/picks/{competition_id}/daily` - Get user's daily picks
+- `POST /api/picks/{competition_id}/daily` - Submit daily picks (batch)
+- `GET /api/picks/{competition_id}/my-picks` - Get user's daily picks
 - `POST /api/picks/{competition_id}/fixed-teams` - Submit fixed team selection
-- `GET /api/picks/{competition_id}/fixed-teams` - Get user's fixed team selections
+- `GET /api/picks/{competition_id}/my-fixed-selections` - Get user's fixed team selections
 
 ### Leaderboards
 - `GET /api/leaderboards/{competition_id}` - Get competition leaderboard
 
 ### Admin
 - `GET /api/admin/join-requests/{competition_id}` - Get join requests (admins only)
-- `POST /api/admin/join-requests/{id}/approve` - Approve join request
-- `POST /api/admin/join-requests/{id}/reject` - Reject join request
+- `POST /api/admin/join-requests/{request_id}/approve` - Approve join request
+- `POST /api/admin/join-requests/{request_id}/reject` - Reject join request
 - `GET /api/admin/audit-logs` - Get audit logs
+- `GET /api/admin/users` - List users (global admin only)
+- `POST /api/admin/sync-games` - Trigger game sync (global admin only)
+
+### Bug Reports
+- `POST /api/bug-reports` - Submit bug report
+- `GET /api/bug-reports/mine` - Get user's bug reports
+- `GET /api/bug-reports` - List all bug reports (admin only)
+- `PATCH /api/bug-reports/{report_id}` - Update bug report status (admin only)
+
+### Health & Monitoring
+- `GET /health` - Basic health check
+- `GET /ping` - Ping endpoint
+- `GET /api/health/api-status` - Sports API health status
+- `POST /api/health/reset-circuit-breakers` - Reset circuit breakers (admin only)
+
+### WebSocket
+- `WS /ws/scores` - Live score updates (Redis pub/sub)
 
 Full API documentation available at `/docs` when the backend is running.
 
