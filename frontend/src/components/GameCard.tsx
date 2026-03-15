@@ -8,7 +8,7 @@ interface GameCardProps {
   onPickChange: (gameId: string, teamId: string) => void
 }
 
-const GameCard: React.FC<GameCardProps> = ({ game, userPick, onPickChange }) => {
+const GameCard: React.FC<GameCardProps> = React.memo(function GameCard({ game, userPick, onPickChange }) {
   const locked = isGameLocked(game)
 
   // Helper for team card styling.
@@ -117,6 +117,6 @@ const GameCard: React.FC<GameCardProps> = ({ game, userPick, onPickChange }) => 
       )}
     </div>
   )
-}
+})
 
 export default GameCard
