@@ -130,12 +130,12 @@ async def test_change_password(client: AsyncClient, test_user: User):
     resp = await client.post(
         "/api/users/me/change-password",
         headers={"Authorization": f"Bearer {token}"},
-        json={"current_password": "Password123", "new_password": "NewPass456"},
+        json={"current_password": "Password123", "new_password": "NewPass456!"},
     )
     assert resp.status_code == 200
 
     # Verify new password works
-    login_resp = await client.post("/api/auth/login", json={"email": "test@example.com", "password": "NewPass456"})
+    login_resp = await client.post("/api/auth/login", json={"email": "test@example.com", "password": "NewPass456!"})
     assert login_resp.status_code == 200
 
 
@@ -146,7 +146,7 @@ async def test_change_password_wrong_current(client: AsyncClient, test_user: Use
     resp = await client.post(
         "/api/users/me/change-password",
         headers={"Authorization": f"Bearer {token}"},
-        json={"current_password": "WrongPass999", "new_password": "NewPass456"},
+        json={"current_password": "WrongPass999", "new_password": "NewPass456!"},
     )
     assert resp.status_code == 400
 
@@ -680,7 +680,7 @@ async def test_register_duplicate_email(client: AsyncClient, test_user: User):
     """Registering with an existing email returns 400."""
     resp = await client.post(
         "/api/auth/register",
-        json={"email": "test@example.com", "username": "uniquename", "password": "StrongPass1"},
+        json={"email": "test@example.com", "username": "uniquename", "password": "StrongPass1!"},
     )
     assert resp.status_code == 400
     assert "already registered" in resp.json()["detail"].lower()
@@ -691,7 +691,7 @@ async def test_register_duplicate_username(client: AsyncClient, test_user: User)
     """Registering with an existing username returns 400."""
     resp = await client.post(
         "/api/auth/register",
-        json={"email": "unique@example.com", "username": "testuser", "password": "StrongPass1"},
+        json={"email": "unique@example.com", "username": "testuser", "password": "StrongPass1!"},
     )
     assert resp.status_code == 400
     assert "username" in resp.json()["detail"].lower()

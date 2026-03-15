@@ -47,7 +47,7 @@ export default function Competitions() {
               <div className="flex justify-between items-start mb-3">
                 <h3 className="text-xl font-semibold">{comp.name}</h3>
                 <span
-                  className={`badge ${
+                  className={`badge capitalize ${
                     comp.status === 'active'
                       ? 'badge-in-progress'
                       : comp.status === 'upcoming'
@@ -55,7 +55,7 @@ export default function Competitions() {
                       : 'badge-final'
                   }`}
                 >
-                  {comp.status}
+                  {comp.status.replace(/_/g, ' ')}
                 </span>
               </div>
 

@@ -8,10 +8,8 @@ This document outlines critical, high-priority, and medium-priority tasks that s
 
 These issues pose significant security or stability risks and must be addressed before any production deployment.
 
--   **[ ] Prevent Seed Script from Running in Production:**
+-   **[x] Prevent Seed Script from Running in Production:** ✅ Fixed — `seed_data.py` now exits with error if `ENVIRONMENT=production`
     -   **File**: `backend/scripts/seed_data.py`
-    -   **Issue**: This script populates the database with test data, including users with known, weak passwords (e.g., `admin123`). Running this in production would create a massive, immediate security vulnerability.
-    -   **Action**: Add a check at the beginning of the `main()` function in `seed_data.py` that raises an exception if `settings.ENVIRONMENT` is set to `"production"`, preventing it from running.
 
 -   **[ ] Remove Hardcoded Credentials from Configuration:**
     -   **File**: `backend/app/core/config.py`
@@ -42,10 +40,8 @@ These issues could lead to instability, poor performance, or security vulnerabil
         2.  In the final stage, copy only the necessary files and installed packages from the `builder` stage onto a slim base image.
         3.  Optimize layer caching by copying `requirements.txt` and running `pip install` *before* copying the rest of the application code.
 
--   **[ ] Configure Generic Error Messages in Production:**
+-   **[x] Configure Generic Error Messages in Production:** ✅ Fixed — exception handler returns generic message unless `ENVIRONMENT=development`
     -   **File**: `backend/app/main.py`
-    -   **Issue**: The global exception handler leaks detailed error information (`{type(exc).__name__}: {exc}`), which could expose internal application details to attackers.
-    -   **Action**: Modify the `unhandled_exception_handler` to return a generic JSON error message (e.g., `{"detail": "Internal Server Error"}`) when `settings.ENVIRONMENT` is `"production"`.
 
 -   **[ ] Clarify and Configure Worker Deployment:**
     -   **Files**: `render.yaml`, `worker.py`, `Procfile`, `Dockerfile.worker`

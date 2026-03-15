@@ -1,6 +1,6 @@
 # United Degenerates League — Architecture
 
-**Last Updated:** 2026-03-06
+**Last Updated:** 2026-03-15
 
 ---
 
@@ -56,20 +56,22 @@ udl/
 │
 ├── frontend/                  # React TypeScript application
 │   ├── src/
-│   ├── pages/            # Route components
-│   ├── components/       # Reusable UI components
-│   ├── services/         # API client + state management
-│   ├── tests/            # Frontend tests
-│   ├── App.tsx           # Router configuration
+│   │   ├── pages/            # Route components
+│   │   ├── components/       # Reusable UI components (GameCard, Leaderboard, etc.)
+│   │   ├── services/         # API client + state management
+│   │   ├── hooks/            # Custom hooks (useLiveScores)
+│   │   ├── utils/            # Shared utilities (errors, format)
+│   │   ├── types/            # TypeScript interfaces
+│   │   ├── styles/           # CSS and Tailwind styles
+│   │   ├── tests/            # Frontend tests
+│   │   ├── App.tsx           # Router configuration
 │   │   └── main.tsx          # React entry point
-│   ├── public/               # Static assets
 │   ├── package.json          # Node dependencies
 │   ├── vite.config.ts        # Build configuration
 │   ├── vitest.config.ts      # Test configuration
 │   ├── tailwind.config.js    # Styling configuration
 │   └── tsconfig.json         # TypeScript configuration
 │
-├── docs/                      # Project documentation
 ├── mcp_server/                # MCP server for Playwright integration
 ├── docker-compose.yml         # Multi-container orchestration
 ├── render.yaml              # Render deployment config
@@ -384,10 +386,10 @@ class Settings(BaseSettings):
     """
 
     # Database
-    DATABASE_URL: str  # postgresql://user:pass@host:5432/db
+    DATABASE_URL: str = "postgresql://udl_user:udl_password@localhost:5432/udl_db"
 
     # Redis
-    REDIS_URL: str  # redis://host:6379/0
+    REDIS_URL: str = "redis://localhost:6379/0"
 
     # Security (JWT)
     SECRET_KEY: str  # Strong random key for signing tokens
@@ -396,7 +398,8 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # CORS (Frontend URLs allowed to call API)
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    # Stored as comma-separated string, parsed via cors_origins_list property
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
 
     # Sports Data APIs (Multi-provider for redundancy)
     ESPN_API_KEY: str = ""
@@ -487,7 +490,7 @@ def verify_token(token: str, token_type: str) -> Optional[dict]:
 - **JWT vs sessions:** Stateless, scales horizontally
 - **Token types:** Prevents access tokens being used as refresh tokens
 - **Short access token TTL:** Limits damage if token is stolen
-- **No token refresh endpoint:** Would require implementing (TODO)
+- **Token refresh endpoint:** `POST /api/auth/refresh` rotates access tokens using refresh tokens stored in httpOnly cookies
 
 ##### `deps.py` - Dependency Injection Hub
 ```python
@@ -749,6 +752,18 @@ class Game(Base):
     away_team_score: int | None
     winner_team_id: UUID | None
 
+    # Betting odds (sourced from ESPN/DraftKings)
+    spread: float | None       # Home team perspective; negative = home favored
+    over_under: float | None
+
+    # Scoring state — set True after picks are scored.
+    # Background job retries scoring on FINAL games where this is False.
+    scoring_completed: bool = False
+
+    # Score correction tracking
+    score_corrected_at: datetime | None
+    score_correction_count: int = 0  # Max 1 per spec
+
     # Raw API response stored for debugging
     api_data: JSON
 ```
@@ -849,8 +864,11 @@ FastAPI App (main.py)
     ├─── /api/competitions → competitions.py (authenticated)
     ├─── /api/picks        → picks.py (authenticated)
     ├─── /api/leaderboards → leaderboards.py (authenticated)
+    ├─── /api/leagues      → leagues.py (authenticated)
+    ├─── /api/bug-reports  → bug_reports.py (authenticated)
     ├─── /api/admin        → admin.py (admin only)
-    └─── /api/health       → health.py (monitoring)
+    ├─── /api/health       → health.py (monitoring)
+    └─── /ws/scores        → ws.py (WebSocket)
 ```
 
 ##### REST API Conventions
@@ -910,7 +928,7 @@ async def login(credentials: UserLogin, db: AsyncSession):
     Security:
     - Constant-time password verification (prevents timing attacks)
     - Generic error message (doesn't reveal if email exists)
-    - Rate limiting (TODO: not implemented yet)
+    - Rate limiting (implemented via slowapi)
     """
 ```
 
@@ -1941,8 +1959,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 **Security considerations:**
 - ⚠️ **localStorage XSS risk:** If attacker injects script, can steal tokens
 - ✅ **Alternative:** httpOnly cookies (immune to XSS, vulnerable to CSRF)
-- ⚠️ **No token refresh:** Access token expires after 30min, user logged out
-- TODO: Implement silent refresh with refresh token
+- ✅ **Token refresh:** `POST /api/auth/refresh` rotates access tokens using refresh tokens in httpOnly cookies
 
 ##### `services/api.ts` - Axios HTTP Client
 

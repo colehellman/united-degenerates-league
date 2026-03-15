@@ -67,7 +67,9 @@ class CompetitionUpdate(BaseModel):
     join_type: Optional[JoinType] = None
     max_participants: Optional[int] = None
     max_picks_per_day: Optional[int] = None
-    status: Optional[CompetitionStatus] = None
+    # status is intentionally excluded — competition lifecycle transitions
+    # are managed by background jobs only (UPCOMING → ACTIVE → COMPLETED).
+    # Allowing admins to set status directly would bypass the intended flow.
 
 
 class CompetitionResponse(CompetitionBase):

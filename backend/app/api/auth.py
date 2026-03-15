@@ -1,15 +1,22 @@
+import uuid
+import logging
+
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional
-
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.core.deps import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token, verify_token
 from app.models.user import User, AccountStatus
 from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse
+from app.services.token_blacklist import blacklist_token, is_token_blacklisted, is_user_token_revoked
+
+logger = logging.getLogger(__name__)
 
 
 class RefreshRequest(BaseModel):
@@ -17,6 +24,7 @@ class RefreshRequest(BaseModel):
 
 
 router = APIRouter()
+
 
 # Cookie configuration
 _is_prod = settings.ENVIRONMENT == "production"
@@ -55,8 +63,41 @@ def _clear_auth_cookies(response: Response):
     response.delete_cookie("refresh_token", **_cookie_kwargs)
 
 
+def _check_account_lockout(user: User) -> None:
+    """Raise 429 if user has exceeded failed login attempts."""
+    if (
+        user.failed_login_attempts
+        and user.failed_login_attempts >= settings.AUTH_LOCKOUT_ATTEMPTS
+        and user.locked_until
+        and user.locked_until > datetime.utcnow()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Account temporarily locked due to too many failed login attempts. Try again later.",
+        )
+
+
+async def _record_failed_login(db: AsyncSession, user: User) -> None:
+    """Increment failed login counter and lock if threshold exceeded."""
+    user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+    if user.failed_login_attempts >= settings.AUTH_LOCKOUT_ATTEMPTS:
+        from datetime import timedelta
+        user.locked_until = datetime.utcnow() + timedelta(minutes=settings.AUTH_LOCKOUT_MINUTES)
+        logger.warning(f"Account locked for user {user.id} after {user.failed_login_attempts} failed attempts")
+    await db.commit()
+
+
+async def _clear_failed_logins(db: AsyncSession, user: User) -> None:
+    """Reset failed login counter on successful login."""
+    if user.failed_login_attempts:
+        user.failed_login_attempts = 0
+        user.locked_until = None
+
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.AUTH_RATE_LIMIT)
 async def register(
+    request: Request,
     user_data: UserCreate,
     response: Response,
     db: AsyncSession = Depends(get_db),
@@ -91,12 +132,21 @@ async def register(
     )
 
     db.add(new_user)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        # Race condition: another request registered the same email/username
+        # between our check and commit. Return a generic message.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email or username already taken",
+        )
     await db.refresh(new_user)
 
     # Create tokens
     access_token = create_access_token(data={"sub": str(new_user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(new_user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(new_user.id), "jti": str(uuid.uuid4())})
 
     _set_auth_cookies(response, access_token, refresh_token)
 
@@ -108,7 +158,9 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit(settings.AUTH_RATE_LIMIT)
 async def login(
+    request: Request,
     credentials: UserLogin,
     response: Response,
     db: AsyncSession = Depends(get_db),
@@ -117,7 +169,18 @@ async def login(
     result = await db.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(credentials.password, user.hashed_password):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Check account lockout before verifying password
+    _check_account_lockout(user)
+
+    if not verify_password(credentials.password, user.hashed_password):
+        await _record_failed_login(db, user)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -130,14 +193,15 @@ async def login(
             detail="User account is not active",
         )
 
-    # Update last login
+    # Clear failed login counter and update last login
+    await _clear_failed_logins(db, user)
     user.last_login_at = datetime.utcnow()
     await db.commit()
     await db.refresh(user)
 
     # Create tokens
     access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(user.id), "jti": str(uuid.uuid4())})
 
     _set_auth_cookies(response, access_token, refresh_token)
 
@@ -149,7 +213,9 @@ async def login(
 
 
 @router.post("/refresh", response_model=TokenResponse)
+@limiter.limit(settings.AUTH_RATE_LIMIT)
 async def refresh_tokens(
+    request: Request,
     response: Response,
     body: RefreshRequest = RefreshRequest(),
     refresh_token_cookie: Optional[str] = Cookie(None, alias="refresh_token"),
@@ -177,11 +243,27 @@ async def refresh_tokens(
             detail="Invalid or expired refresh token",
         )
 
+    # Check if this specific token has been blacklisted (logout)
+    jti = payload.get("jti")
+    if jti and is_token_blacklisted(jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+        )
+
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token payload",
+        )
+
+    # Check if all user tokens were revoked (password change / account deletion)
+    token_iat = payload.get("iat")
+    if is_user_token_revoked(user_id, token_iat):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
         )
 
     result = await db.execute(select(User).where(User.id == user_id))
@@ -193,9 +275,14 @@ async def refresh_tokens(
             detail="User not found or inactive",
         )
 
+    # Blacklist the old refresh token (one-time use)
+    if jti:
+        blacklist_token(jti, payload.get("exp"))
+
     # Issue new token pair (rotate refresh token for security)
+    new_jti = str(uuid.uuid4())
     new_access = create_access_token(data={"sub": str(user.id)})
-    new_refresh = create_refresh_token(data={"sub": str(user.id)})
+    new_refresh = create_refresh_token(data={"sub": str(user.id), "jti": new_jti})
 
     _set_auth_cookies(response, new_access, new_refresh)
 
@@ -207,7 +294,20 @@ async def refresh_tokens(
 
 
 @router.post("/logout")
-async def logout(response: Response):
-    """Clear auth cookies"""
+async def logout(
+    response: Response,
+    refresh_token_cookie: Optional[str] = Cookie(None, alias="refresh_token"),
+    body: RefreshRequest = RefreshRequest(),
+):
+    """Clear auth cookies and blacklist the refresh token server-side."""
+    # Blacklist the refresh token so it can't be reused
+    token = body.refresh_token or refresh_token_cookie
+    if token:
+        payload = verify_token(token, token_type="refresh")
+        if payload:
+            jti = payload.get("jti")
+            if jti:
+                blacklist_token(jti, payload.get("exp"))
+
     _clear_auth_cookies(response)
     return {"message": "Logged out"}

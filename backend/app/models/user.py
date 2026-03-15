@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -10,12 +10,17 @@ from app.db.session import Base
 
 class UserRole(str, enum.Enum):
     USER = "user"
+    # LEAGUE_ADMIN is unused — competition-level admin is handled via
+    # Competition.league_admin_ids (per-competition array). Kept for DB
+    # compatibility but never assigned or checked anywhere.
     LEAGUE_ADMIN = "league_admin"
     GLOBAL_ADMIN = "global_admin"
 
 
 class AccountStatus(str, enum.Enum):
     ACTIVE = "active"
+    SUSPENDED = "suspended"
+    BANNED = "banned"
     PENDING_DELETION = "pending_deletion"
     DELETED = "deleted"
 
@@ -37,6 +42,10 @@ class User(Base):
 
     # Account deletion
     deletion_requested_at = Column(DateTime, nullable=True)
+
+    # Brute-force protection
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    locked_until = Column(DateTime, nullable=True)
 
     # Onboarding
     has_dismissed_onboarding = Column(Boolean, default=False, nullable=False)

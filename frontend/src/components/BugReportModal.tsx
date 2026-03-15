@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api from '../services/api'
@@ -22,6 +22,7 @@ export default function BugReportModal({ isOpen, onClose }: BugReportModalProps)
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('other')
   const [error, setError] = useState('')
+  const overlayRef = useRef<HTMLDivElement>(null)
 
   const mutation = useMutation({
     mutationFn: (data: { title: string; description: string; category: string; page_url: string }) =>
@@ -35,14 +36,13 @@ export default function BugReportModal({ isOpen, onClose }: BugReportModalProps)
     },
   })
 
-  function handleClose() {
-    // Reset form state on close so re-opens start fresh
+  const handleClose = useCallback(() => {
     setTitle('')
     setDescription('')
     setCategory('other')
     setError('')
     onClose()
-  }
+  }, [onClose])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -55,12 +55,39 @@ export default function BugReportModal({ isOpen, onClose }: BugReportModalProps)
     })
   }
 
+  // Close on ESC key
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, handleClose])
+
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="card w-full max-w-lg">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Report a Bug</h2>
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={(e) => { if (e.target === overlayRef.current) handleClose() }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="bug-report-title"
+    >
+      <div className="card w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <h2 id="bug-report-title" className="text-lg font-semibold text-gray-900 mb-4">Report a Bug</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -76,6 +103,7 @@ export default function BugReportModal({ isOpen, onClose }: BugReportModalProps)
               onChange={(e) => setTitle(e.target.value)}
               maxLength={200}
               required
+              autoFocus
             />
           </div>
 
@@ -119,7 +147,7 @@ export default function BugReportModal({ isOpen, onClose }: BugReportModalProps)
             </div>
           )}
 
-          <div className="flex justify-end space-x-3 pt-2">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
             <button type="button" onClick={handleClose} className="btn btn-secondary">
               Cancel
             </button>

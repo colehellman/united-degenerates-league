@@ -8,6 +8,10 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 ALGORITHM = settings.ALGORITHM
 SECRET_KEY = settings.SECRET_KEY
+# Use a separate signing key for refresh tokens when configured.
+# Falls back to SECRET_KEY for backwards compatibility, but production
+# deployments should always set REFRESH_SECRET_KEY to isolate token types.
+REFRESH_SECRET_KEY = settings.REFRESH_SECRET_KEY or settings.SECRET_KEY
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -26,16 +30,18 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def create_refresh_token(data: dict) -> str:
     """Create JWT refresh token"""
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode.update({"exp": expire, "type": "refresh"})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    now = datetime.utcnow()
+    expire = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "iat": int(now.timestamp()), "type": "refresh"})
+    encoded_jwt = jwt.encode(to_encode, REFRESH_SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
 def verify_token(token: str, token_type: str = "access") -> Optional[dict]:
     """Verify JWT token and return payload"""
+    key = REFRESH_SECRET_KEY if token_type == "refresh" else SECRET_KEY
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, key, algorithms=[ALGORITHM])
         if payload.get("type") != token_type:
             return None
         return payload

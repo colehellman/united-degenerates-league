@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import api from '../services/api'
 import GameCard from '../components/GameCard'
 import Leaderboard from '../components/Leaderboard'
+import Spinner from '../components/Spinner'
 import { isGameLocked, formatDate } from '../utils/format'
 
 interface Pick {
@@ -340,7 +341,7 @@ export default function CompetitionDetail() {
   }, [competition?.name])
 
   if (compLoading) {
-    return <div className="text-center py-8">Loading...</div>
+    return <Spinner />
   }
 
   if (!competition) {
@@ -358,13 +359,15 @@ export default function CompetitionDetail() {
     <div className="space-y-6">
       {/* Competition Header */}
       <div className="card">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">{competition.name}</h1>
-            <p className="text-gray-600">{competition.description}</p>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold mb-2 break-words">{competition.name}</h1>
+            {competition.description && (
+              <p className="text-gray-600">{competition.description}</p>
+            )}
           </div>
           <span
-            className={`badge ${
+            className={`badge shrink-0 self-start capitalize ${
               competition.status === 'active'
                 ? 'badge-in-progress'
                 : competition.status === 'upcoming'
@@ -376,7 +379,7 @@ export default function CompetitionDetail() {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4 text-sm">
           <div>
             <p className="text-gray-600">Mode</p>
             <p className="font-semibold capitalize">{competition.mode.replace('_', ' ')}</p>
@@ -502,7 +505,7 @@ export default function CompetitionDetail() {
               )}
 
               {gamesLoading ? (
-                <p>Loading games...</p>
+                <Spinner />
               ) : games && games.length > 0 ? (
                 (() => {
                   // When every game on this date has started, show only the
@@ -534,10 +537,10 @@ export default function CompetitionDetail() {
 
                       {/* Submit / Update button — shown while any game is still open */}
                       {!allLocked && (
-                        <div className="sticky bottom-0 bg-white border-t pt-4 -mx-4 px-4 md:-mx-6 md:px-6 -mb-6 pb-6">
+                        <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t pt-4 pb-4 mt-4">
                           {hasSubmittedPicks && (
                             <p className="text-xs text-gray-500 text-center mb-2">
-                              ✏️ Picks are editable until each game starts
+                              Picks are editable until each game starts
                             </p>
                           )}
                           <button
@@ -653,7 +656,7 @@ export default function CompetitionDetail() {
                         )}
                       </div>
 
-                      <div className="sticky bottom-0 bg-white border-t pt-4 -mx-6 px-6 -mb-6 pb-6">
+                      <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t pt-4 pb-4 mt-4">
                         <div className="text-sm text-gray-600 mb-2">
                           {fixedSelections.length} of{' '}
                           {competition.max_teams_per_participant ||
@@ -667,12 +670,12 @@ export default function CompetitionDetail() {
                         >
                           {submitFixedSelectionsMutation.isPending
                             ? 'Submitting...'
-                            : `Submit Selections`}
+                            : 'Submit Selections'}
                         </button>
                       </div>
                     </>
                   ) : (
-                    <p>Loading available selections...</p>
+                    <Spinner />
                   )}
                 </>
               )}

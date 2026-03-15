@@ -47,7 +47,7 @@ cd frontend && npm install && npm run dev
 ```
 backend/
   app/
-    api/          # Route handlers (auth, users, competitions, picks, leaderboards, admin, ws)
+    api/          # Route handlers (auth, users, competitions, picks, leaderboards, leagues, bug_reports, admin, health, ws)
     core/         # config.py, security.py, deps.py
     db/           # session.py (async engine + session factory)
     models/       # SQLAlchemy ORM models (UUID PKs, async)
@@ -60,10 +60,11 @@ backend/
 frontend/
   src/
     pages/        # Route components (Login, Register, Dashboard, Competitions)
-    components/   # Layout, ErrorBoundary
+    components/   # Layout, ErrorBoundary, BugReportModal, GameCard, Leaderboard, Spinner
     services/     # api.ts (axios), authStore.ts (zustand)
     hooks/        # useLiveScores.ts (WebSocket)
     types/        # TypeScript interfaces
+    utils/        # errors.ts (shared error extraction), format.tsx
 ```
 
 ## Key Commands
@@ -86,7 +87,7 @@ cd backend && source .venv/bin/activate && python worker.py
 ## Architecture Notes
 
 - **Auth**: JWT access (30min) + refresh (7d) tokens in httpOnly cookies. Bearer header also accepted. See `core/deps.py` for the dual-check logic.
-- **Sports APIs**: Multi-provider failover (ESPN → Odds API → RapidAPI → SportsData → free MLB/NHL). Circuit breaker pattern in `services/circuit_breaker.py`.
+- **Sports APIs**: Multi-provider failover (ESPN → Odds API → RapidAPI → free MLB/NHL). Circuit breaker pattern in `services/circuit_breaker.py`.
 - **Background jobs**: APScheduler runs score updates (60s), competition transitions (5min), pick locking (60s), account cleanup (daily 2AM). Can run in-process or as separate worker via `DISABLE_BACKGROUND_JOBS=true`.
 - **WebSocket**: `/ws/scores` broadcasts live score updates. Redis pub/sub bridges worker↔API processes. See `services/ws_manager.py`.
 - **Models**: All use UUID primary keys. Enums for status fields (UserRole, CompetitionStatus, GameStatus, etc.).

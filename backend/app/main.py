@@ -5,12 +5,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from contextlib import asynccontextmanager
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.db.session import AsyncSessionLocal
 from app.api import auth, users, competitions, picks, leaderboards, admin, health, ws, leagues, bug_reports
 
@@ -34,8 +34,7 @@ if settings.ENVIRONMENT == "production" and settings.SENTRY_DSN:
     )
     logger.info("Sentry initialized")
 
-# Rate limiter
-limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
+# Rate limiter (shared instance from app.core.limiter)
 
 
 async def _seed_leagues_if_empty():
@@ -144,6 +143,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'"
     if settings.ENVIRONMENT == "production":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response

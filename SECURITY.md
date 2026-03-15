@@ -52,7 +52,7 @@
 Never commit files containing:
 - `SECRET_KEY` - Used for JWT token signing
 - `DATABASE_URL` - Contains database password
-- `ESPN_API_KEY`, `SPORTSDATA_API_KEY`, etc. - Sports API credentials
+- `ESPN_API_KEY`, `THE_ODDS_API_KEY`, `RAPIDAPI_KEY`, etc. - Sports API credentials
 - Any password or authentication token
 
 ## ✅ Safe to Commit
