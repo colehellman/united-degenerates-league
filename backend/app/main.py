@@ -111,9 +111,14 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         f"Unhandled {type(exc).__name__} on {request.method} {request.url.path}: {exc}",
         exc_info=True,
     )
+    detail = (
+        f"{type(exc).__name__}: {exc}"
+        if settings.ENVIRONMENT == "development"
+        else "Internal server error"
+    )
     return JSONResponse(
         status_code=500,
-        content={"detail": f"{type(exc).__name__}: {exc}"},
+        content={"detail": detail},
     )
 
 
