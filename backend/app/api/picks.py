@@ -271,7 +271,7 @@ async def create_fixed_team_selections_batch(
             detail="Selection phase has ended",
         )
 
-    # Verify user is participant
+    # Verify user is participant (lock row to prevent concurrent oversubmission)
     participant_result = await db.execute(
         select(Participant).where(
             and_(
@@ -279,6 +279,7 @@ async def create_fixed_team_selections_batch(
                 Participant.user_id == current_user.id,
             )
         )
+        .with_for_update()
     )
     if not participant_result.scalar_one_or_none():
         raise HTTPException(
