@@ -105,13 +105,14 @@ async def update_game_scores():
                             try:
                                 await score_picks_for_game(db, game)
                             except Exception as score_err:
+                                # Keep the game FINAL — the API data is correct.
+                                # Scoring will be retried on next sync cycle.
                                 logger.critical(
-                                    f"Pick scoring failed for game {game.id} after marking FINAL. "
-                                    f"Reverting to IN_PROGRESS. Error: {score_err}",
+                                    f"Pick scoring failed for game {game.id}. "
+                                    f"Game stays FINAL; scoring will retry next cycle. "
+                                    f"Error: {score_err}",
                                     exc_info=True,
                                 )
-                                game.status = GameStatus.IN_PROGRESS
-                                game.winner_team_id = None
 
                 except Exception as e:
                     logger.error(f"Error updating scores for {league_name}: {str(e)}")
