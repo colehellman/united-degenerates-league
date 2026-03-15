@@ -23,7 +23,8 @@ def upgrade() -> None:
     op.create_index('ix_games_scoring_completed', 'games', ['scoring_completed'])
     # Backfill: mark all existing FINAL games as scored (they were scored
     # under the old logic, or their scoring window has passed).
-    op.execute("UPDATE games SET scoring_completed = true WHERE status = 'final'::gamestatus")
+    # Use sa.text() with a bind parameter to avoid asyncpg enum casting issues.
+    op.execute(sa.text("UPDATE games SET scoring_completed = true WHERE status = CAST(:s AS gamestatus)").bindparams(s="final"))
 
 
 def downgrade() -> None:
