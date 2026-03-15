@@ -101,18 +101,17 @@ async def update_game_scores():
                         game.updated_at = datetime.utcnow()
                         updated_games.append(game)
 
-                        if was_not_final and game.status == GameStatus.FINAL:
+                        if game.status == GameStatus.FINAL and not game.scoring_completed:
                             try:
                                 await score_picks_for_game(db, game)
+                                game.scoring_completed = True
                             except Exception as score_err:
                                 # Keep the game FINAL — the API data is correct.
-                                # WARNING: scoring will NOT automatically retry because
-                                # was_not_final will be False on subsequent cycles.
-                                # Manual intervention or a dedicated recovery job is needed.
-                                logger.critical(
+                                # scoring_completed stays False so the next sync
+                                # cycle will retry automatically.
+                                logger.error(
                                     f"Pick scoring failed for game {game.id}. "
-                                    f"Game stays FINAL but picks are UNSCORED. "
-                                    f"MANUAL INTERVENTION REQUIRED. Error: {score_err}",
+                                    f"Will retry on next sync cycle. Error: {score_err}",
                                     exc_info=True,
                                 )
 

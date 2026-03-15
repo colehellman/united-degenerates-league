@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Float, DateTime, Enum, ForeignKey, JSON, UniqueConstraint
+from sqlalchemy import Boolean, Column, String, Integer, Float, DateTime, Enum, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -60,6 +60,10 @@ class Game(Base):
 
     # Additional data from API (stored as JSON)
     api_data = Column(JSON, nullable=True)
+
+    # Scoring state — set to True after picks are successfully scored.
+    # Used by the background job to retry scoring on FINAL games that failed.
+    scoring_completed = Column(Boolean, default=False, nullable=False, index=True)
 
     # Score correction tracking
     score_corrected_at = Column(DateTime, nullable=True)
