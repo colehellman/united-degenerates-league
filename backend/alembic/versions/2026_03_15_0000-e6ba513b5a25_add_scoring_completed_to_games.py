@@ -21,10 +21,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.add_column('games', sa.Column('scoring_completed', sa.Boolean(), nullable=False, server_default='false'))
     op.create_index('ix_games_scoring_completed', 'games', ['scoring_completed'])
-    # Backfill: mark all existing FINAL games as scored (they were scored
-    # under the old logic, or their scoring window has passed).
-    # Use sa.text() with a bind parameter to avoid asyncpg enum casting issues.
-    op.execute(sa.text("UPDATE games SET scoring_completed = true WHERE status = CAST(:s AS gamestatus)").bindparams(s="final"))
+    # NOTE: For existing production databases, run this backfill manually:
+    #   UPDATE games SET scoring_completed = true WHERE status = 'final';
+    # It cannot be run via asyncpg due to enum type casting limitations.
 
 
 def downgrade() -> None:
