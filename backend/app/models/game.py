@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Float, DateTime, Enum, ForeignKey, JSON
+from sqlalchemy import Column, String, Integer, Float, DateTime, Enum, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -19,6 +19,9 @@ class GameStatus(str, enum.Enum):
 
 class Game(Base):
     __tablename__ = "games"
+    __table_args__ = (
+        UniqueConstraint('competition_id', 'external_id', name='uq_game_competition_external_id'),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     competition_id = Column(UUID(as_uuid=True), ForeignKey("competitions.id"), nullable=False, index=True)
