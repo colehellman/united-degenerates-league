@@ -2,12 +2,11 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, delete
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from typing import List, Optional
 from datetime import datetime
 
 from app.core.deps import get_db, get_current_user, get_current_global_admin
+from app.core.limiter import limiter
 from app.models.user import User, AccountStatus, UserRole
 from app.models.competition import Competition, CompetitionStatus
 from app.models.participant import JoinRequest, JoinRequestStatus, Participant
@@ -26,8 +25,6 @@ from app.schemas.admin import (
 )
 
 logger = logging.getLogger(__name__)
-
-admin_limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter()
 
@@ -61,7 +58,7 @@ async def _require_competition_admin(
 # ===========================================================================
 
 @router.patch("/users/{user_id}/status", response_model=UserResponse)
-@admin_limiter.limit("10/minute")
+@limiter.limit("10/minute")
 async def update_user_status(
     request: Request,
     user_id: str,
@@ -115,7 +112,7 @@ async def update_user_status(
 
 
 @router.patch("/users/{user_id}/role", response_model=UserResponse)
-@admin_limiter.limit("10/minute")
+@limiter.limit("10/minute")
 async def update_user_role(
     request: Request,
     user_id: str,
@@ -172,7 +169,7 @@ async def list_all_users(
 # ===========================================================================
 
 @router.post("/competitions/{competition_id}/status")
-@admin_limiter.limit("10/minute")
+@limiter.limit("10/minute")
 async def force_competition_status(
     request: Request,
     competition_id: str,
@@ -218,7 +215,7 @@ async def force_competition_status(
 # ===========================================================================
 
 @router.post("/games/{game_id}/correct-score")
-@admin_limiter.limit("5/minute")
+@limiter.limit("5/minute")
 async def correct_game_score(
     request: Request,
     game_id: str,
@@ -291,7 +288,7 @@ async def correct_game_score(
 
 
 @router.post("/games/{game_id}/rescore")
-@admin_limiter.limit("10/minute")
+@limiter.limit("10/minute")
 async def rescore_game(
     request: Request,
     game_id: str,

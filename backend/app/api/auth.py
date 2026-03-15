@@ -8,10 +8,8 @@ from sqlalchemy import select
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.core.deps import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token, verify_token
 from app.models.user import User, AccountStatus
@@ -27,8 +25,6 @@ class RefreshRequest(BaseModel):
 
 router = APIRouter()
 
-# Stricter rate limiter for auth endpoints (brute-force protection)
-auth_limiter = Limiter(key_func=get_remote_address)
 
 # Cookie configuration
 _is_prod = settings.ENVIRONMENT == "production"
@@ -99,7 +95,7 @@ async def _clear_failed_logins(db: AsyncSession, user: User) -> None:
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-@auth_limiter.limit(settings.AUTH_RATE_LIMIT)
+@limiter.limit(settings.AUTH_RATE_LIMIT)
 async def register(
     request: Request,
     user_data: UserCreate,
@@ -162,7 +158,7 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
-@auth_limiter.limit(settings.AUTH_RATE_LIMIT)
+@limiter.limit(settings.AUTH_RATE_LIMIT)
 async def login(
     request: Request,
     credentials: UserLogin,
@@ -217,7 +213,7 @@ async def login(
 
 
 @router.post("/refresh", response_model=TokenResponse)
-@auth_limiter.limit(settings.AUTH_RATE_LIMIT)
+@limiter.limit(settings.AUTH_RATE_LIMIT)
 async def refresh_tokens(
     request: Request,
     response: Response,
