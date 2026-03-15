@@ -199,6 +199,7 @@ async def health_check():
         import redis
         r = redis.from_url(settings.REDIS_URL)
         r.ping()
+        r.close()
         checks["redis"] = "ok"
     except Exception as e:
         logger.error(f"Redis health check failed: {e}")
