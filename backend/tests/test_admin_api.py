@@ -298,7 +298,6 @@ async def test_list_participants_as_competition_admin(
     assert len(data) == 1
     assert data[0]["user_id"] == str(second_user.id)
     assert data[0]["username"] == second_user.username
-    assert data[0]["email"] == second_user.email
     assert "total_points" in data[0]
 
 

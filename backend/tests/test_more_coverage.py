@@ -414,7 +414,7 @@ async def test_register_success(client: AsyncClient, db_session: AsyncSession):
     """Happy path: POST /auth/register creates a user and returns tokens."""
     resp = await client.post(
         "/api/auth/register",
-        json={"email": "newuser@example.com", "username": "brandnewuser", "password": "Password123"},
+        json={"email": "newuser@example.com", "username": "brandnewuser", "password": "Password123!"},
     )
     assert resp.status_code == 201
     data = resp.json()

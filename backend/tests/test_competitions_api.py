@@ -17,18 +17,21 @@ async def test_update_competition_status(
     active_competition: Competition,
     db_session: AsyncSession,
 ):
-    """Test updating competition status."""
+    """Test updating competition status via admin endpoint.
+
+    Status is intentionally excluded from CompetitionUpdate — lifecycle
+    transitions must go through POST /admin/competitions/{id}/status.
+    """
     await _make_global_admin(db_session, test_user)
     token = await _login(client)
 
-    # From ACTIVE to COMPLETED
-    resp = await client.patch(
-        f"/api/competitions/{active_competition.id}",
+    # From ACTIVE to COMPLETED via admin endpoint
+    resp = await client.post(
+        f"/api/admin/competitions/{active_competition.id}/status",
         headers={"Authorization": f"Bearer {token}"},
-        json={"status": "completed"},
+        json={"status": "completed", "reason": "Season ended"},
     )
     assert resp.status_code == 200
-    assert resp.json()["status"] == "completed"
 
     await db_session.refresh(active_competition)
     assert active_competition.status == CompetitionStatus.COMPLETED
