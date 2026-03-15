@@ -61,7 +61,7 @@ const GameCard: React.FC<GameCardProps> = ({ game, userPick, onPickChange }) => 
           )}
           {game.spread !== null && game.spread !== undefined && (
             <div className="text-xs text-gray-500 mt-0.5">
-              Spread: {game.spread < 0 ? '+' : '-'}{Math.abs(game.spread)}
+              Spread: {-game.spread > 0 ? '+' : ''}{-game.spread}
             </div>
           )}
           {game.away_team_score !== null && game.away_team_score !== undefined && (
