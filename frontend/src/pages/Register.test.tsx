@@ -28,8 +28,8 @@ function fillForm(overrides: Record<string, string> = {}) {
   const defaults = {
     email: 'bob@example.com',
     username: 'bob',
-    password: 'password123',
-    confirmPassword: 'password123',
+    password: 'Password123!',
+    confirmPassword: 'Password123!',
     ...overrides,
   }
   fireEvent.change(screen.getByLabelText(/email/i), { target: { value: defaults.email } })
@@ -53,23 +53,21 @@ describe('Register — rendering', () => {
 describe('Register — client-side validation', () => {
   it('shows error when passwords do not match', async () => {
     renderRegister()
-    fillForm({ confirmPassword: 'different' })
+    fillForm({ confirmPassword: 'Different123!' })
     fireEvent.click(screen.getByRole('button', { name: /sign up/i }))
 
     await waitFor(() => {
-      expect(screen.getByText('Passwords do not match')).toBeInTheDocument()
+      // Both inline hint and form-level error show "Passwords do not match"
+      expect(screen.getAllByText('Passwords do not match').length).toBeGreaterThan(0)
     })
     expect(mockRegister).not.toHaveBeenCalled()
   })
 
-  it('shows error when password is shorter than 8 characters', async () => {
+  it('disables submit when password does not meet requirements', () => {
     renderRegister()
     fillForm({ password: 'short', confirmPassword: 'short' })
-    fireEvent.click(screen.getByRole('button', { name: /sign up/i }))
 
-    await waitFor(() => {
-      expect(screen.getByText('Password must be at least 8 characters')).toBeInTheDocument()
-    })
+    expect(screen.getByRole('button', { name: /sign up/i })).toBeDisabled()
     expect(mockRegister).not.toHaveBeenCalled()
   })
 })
@@ -82,7 +80,7 @@ describe('Register — successful submission', () => {
     fireEvent.click(screen.getByRole('button', { name: /sign up/i }))
 
     await waitFor(() => {
-      expect(mockRegister).toHaveBeenCalledWith('bob@example.com', 'bob', 'password123')
+      expect(mockRegister).toHaveBeenCalledWith('bob@example.com', 'bob', 'Password123!')
       expect(mockNavigate).toHaveBeenCalledWith('/')
     })
   })

@@ -9,12 +9,20 @@ import api from '../services/api'
 import toast from 'react-hot-toast'
 
 vi.mock('../services/authStore', () => ({ useAuthStore: vi.fn() }))
-vi.mock('../services/api', () => ({ default: { get: vi.fn(), patch: vi.fn() } }))
+vi.mock('../services/api', () => ({ default: { get: vi.fn(), patch: vi.fn(), delete: vi.fn(), post: vi.fn() } }))
 vi.mock('react-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn() } }))
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
 // ---------------------------------------------------------------------------
+
+const SAMPLE_STATS = {
+  total_users: 42,
+  active_competitions: 3,
+  total_competitions: 10,
+  total_picks: 500,
+  total_games: 200,
+}
 
 const SAMPLE_REPORT = {
   id: 'r1',
@@ -64,18 +72,50 @@ const LOG_WITH_TARGET = {
 // Render helpers
 // ---------------------------------------------------------------------------
 
-/** Standard render with a real user and sample data for both tabs. */
+function defaultApiMock(overrides: {
+  bugReports?: any[] | 'loading' | 'error'
+  auditLogs?: any[] | 'loading' | 'error'
+  stats?: any | 'loading' | 'error'
+  users?: any[] | 'loading' | 'error'
+  competitions?: any[] | 'loading' | 'error'
+} = {}) {
+  vi.mocked(api.get).mockImplementation((url: string) => {
+    if (url === '/admin/stats') {
+      if (overrides.stats === 'loading') return new Promise(() => {})
+      if (overrides.stats === 'error') return Promise.reject(new Error('Network error'))
+      return Promise.resolve({ data: overrides.stats ?? SAMPLE_STATS })
+    }
+    if (url === '/admin/users') {
+      if (overrides.users === 'loading') return new Promise(() => {})
+      if (overrides.users === 'error') return Promise.reject(new Error('Network error'))
+      return Promise.resolve({ data: overrides.users ?? [] })
+    }
+    if (url === '/admin/competitions') {
+      if (overrides.competitions === 'loading') return new Promise(() => {})
+      if (overrides.competitions === 'error') return Promise.reject(new Error('Network error'))
+      return Promise.resolve({ data: overrides.competitions ?? [] })
+    }
+    if (url === '/bug-reports') {
+      if (overrides.bugReports === 'loading') return new Promise(() => {})
+      if (overrides.bugReports === 'error') return Promise.reject(new Error('Network error'))
+      return Promise.resolve({ data: overrides.bugReports ?? [SAMPLE_REPORT] })
+    }
+    if (url === '/admin/audit-logs') {
+      if (overrides.auditLogs === 'loading') return new Promise(() => {})
+      if (overrides.auditLogs === 'error') return Promise.reject(new Error('Network error'))
+      return Promise.resolve({ data: overrides.auditLogs ?? [SAMPLE_LOG] })
+    }
+    return Promise.resolve({ data: [] })
+  })
+}
+
+/** Standard render with a real user and sample data. */
 function renderAdmin(role = 'global_admin') {
   vi.mocked(useAuthStore).mockReturnValue({
     user: { id: '1', username: 'admin', email: 'a@b.com', role, status: 'active' },
   } as any)
 
-  // Default API responses — bug reports and audit logs
-  vi.mocked(api.get).mockImplementation((url: string) => {
-    if (url === '/bug-reports') return Promise.resolve({ data: [SAMPLE_REPORT] })
-    if (url === '/admin/audit-logs') return Promise.resolve({ data: [SAMPLE_LOG] })
-    return Promise.resolve({ data: [] })
-  })
+  defaultApiMock()
 
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
@@ -87,35 +127,13 @@ function renderAdmin(role = 'global_admin') {
   )
 }
 
-/**
- * Render with fine-grained control over each tab's response.
- * Pass `'loading'` to return a never-resolving promise (simulates in-flight request).
- * Pass `'error'` to simulate a rejected fetch.
- */
-function renderAdminWith({
-  bugReports,
-  auditLogs,
-}: {
-  bugReports?: any[] | 'loading' | 'error'
-  auditLogs?: any[] | 'loading' | 'error'
-} = {}) {
+/** Render with fine-grained control over each tab's response. */
+function renderAdminWith(overrides: Parameters<typeof defaultApiMock>[0] = {}) {
   vi.mocked(useAuthStore).mockReturnValue({
     user: { id: '1', username: 'admin', email: 'a@b.com', role: 'global_admin', status: 'active' },
   } as any)
 
-  vi.mocked(api.get).mockImplementation((url: string) => {
-    if (url === '/bug-reports') {
-      if (bugReports === 'loading') return new Promise(() => {})
-      if (bugReports === 'error') return Promise.reject(new Error('Network error'))
-      return Promise.resolve({ data: bugReports ?? [SAMPLE_REPORT] })
-    }
-    if (url === '/admin/audit-logs') {
-      if (auditLogs === 'loading') return new Promise(() => {})
-      if (auditLogs === 'error') return Promise.reject(new Error('Network error'))
-      return Promise.resolve({ data: auditLogs ?? [SAMPLE_LOG] })
-    }
-    return Promise.resolve({ data: [] })
-  })
+  defaultApiMock(overrides)
 
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
@@ -125,6 +143,11 @@ function renderAdminWith({
       </MemoryRouter>
     </QueryClientProvider>,
   )
+}
+
+/** Click a tab button by label */
+function clickTab(label: string) {
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(label, 'i') }))
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -151,15 +174,19 @@ describe('Admin — panel rendering', () => {
     expect(screen.getByText('Admin Panel')).toBeInTheDocument()
   })
 
-  it('shows bug reports by default', async () => {
+  it('shows bug reports when Bug Reports tab is clicked', async () => {
     renderAdmin()
-    await screen.findByText('Layout broken')
+    clickTab('Bug Reports')
+    // Text appears in both desktop table and mobile card views
+    const matches = await screen.findAllByText('Layout broken')
+    expect(matches.length).toBeGreaterThan(0)
   })
 
   it('switches to audit logs tab when clicked', async () => {
     renderAdmin()
-    fireEvent.click(screen.getByRole('button', { name: /audit logs/i }))
-    await screen.findByText('user.login')
+    clickTab('Audit Logs')
+    const matches = await screen.findAllByText('user.login')
+    expect(matches.length).toBeGreaterThan(0)
   })
 })
 
@@ -170,9 +197,8 @@ describe('Admin — panel rendering', () => {
 describe('Admin — bug report status badge', () => {
   it('shows Open badge for an open report', async () => {
     renderAdmin()
-    await screen.findByText('Layout broken')
-    // Each row has both a status badge span AND a <select> that shows the same label,
-    // so multiple elements with text "Open" are expected.
+    clickTab('Bug Reports')
+    await screen.findAllByText('Layout broken')
     expect(screen.getAllByText('Open').length).toBeGreaterThan(0)
   })
 })
@@ -184,16 +210,19 @@ describe('Admin — bug report status badge', () => {
 describe('Admin — bug reports loading, empty, and error states', () => {
   it('shows spinner while bug reports are fetching', () => {
     renderAdminWith({ bugReports: 'loading' })
+    clickTab('Bug Reports')
     expect(screen.getByRole('status')).toBeInTheDocument()
   })
 
   it('shows empty-state message when there are no bug reports', async () => {
     renderAdminWith({ bugReports: [] })
+    clickTab('Bug Reports')
     await screen.findByText(/no bug reports submitted yet/i)
   })
 
   it('shows error state instead of empty state when bug reports fetch fails', async () => {
     renderAdminWith({ bugReports: 'error' })
+    clickTab('Bug Reports')
     await screen.findByText(/failed to load bug reports/i)
     expect(screen.queryByText(/no bug reports submitted yet/i)).not.toBeInTheDocument()
   })
@@ -207,9 +236,11 @@ describe('Admin — status update mutation', () => {
   it('calls api.patch with the new status when the select changes', async () => {
     vi.mocked(api.patch).mockResolvedValueOnce({ data: {} })
     renderAdmin()
+    clickTab('Bug Reports')
 
-    await screen.findByText('Layout broken')
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'resolved' } })
+    await screen.findAllByText('Layout broken')
+    const selects = screen.getAllByRole('combobox')
+    fireEvent.change(selects[0], { target: { value: 'resolved' } })
 
     await waitFor(() => {
       expect(api.patch).toHaveBeenCalledWith('/bug-reports/r1', { status: 'resolved' })
@@ -219,9 +250,11 @@ describe('Admin — status update mutation', () => {
   it('shows success toast after a successful status update', async () => {
     vi.mocked(api.patch).mockResolvedValueOnce({ data: {} })
     renderAdmin()
+    clickTab('Bug Reports')
 
-    await screen.findByText('Layout broken')
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'resolved' } })
+    await screen.findAllByText('Layout broken')
+    const selects = screen.getAllByRole('combobox')
+    fireEvent.change(selects[0], { target: { value: 'resolved' } })
 
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith('Status updated')
@@ -231,9 +264,11 @@ describe('Admin — status update mutation', () => {
   it('shows error toast when status update fails', async () => {
     vi.mocked(api.patch).mockRejectedValueOnce(new Error('Server error'))
     renderAdmin()
+    clickTab('Bug Reports')
 
-    await screen.findByText('Layout broken')
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'resolved' } })
+    await screen.findAllByText('Layout broken')
+    const selects = screen.getAllByRole('combobox')
+    fireEvent.change(selects[0], { target: { value: 'resolved' } })
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith('Failed to update status')
@@ -248,19 +283,19 @@ describe('Admin — status update mutation', () => {
 describe('Admin — audit logs loading, empty, and error states', () => {
   it('shows spinner while audit logs are fetching', () => {
     renderAdminWith({ auditLogs: 'loading' })
-    fireEvent.click(screen.getByRole('button', { name: /audit logs/i }))
+    clickTab('Audit Logs')
     expect(screen.getByRole('status')).toBeInTheDocument()
   })
 
   it('shows empty-state message when there are no audit logs', async () => {
     renderAdminWith({ auditLogs: [] })
-    fireEvent.click(screen.getByRole('button', { name: /audit logs/i }))
+    clickTab('Audit Logs')
     await screen.findByText(/no audit log entries yet/i)
   })
 
   it('shows error state instead of empty state when audit logs fetch fails', async () => {
     renderAdminWith({ auditLogs: 'error' })
-    fireEvent.click(screen.getByRole('button', { name: /audit logs/i }))
+    clickTab('Audit Logs')
     await screen.findByText(/failed to load audit logs/i)
     expect(screen.queryByText(/no audit log entries yet/i)).not.toBeInTheDocument()
   })
@@ -275,9 +310,10 @@ describe('Admin — bug report table edge cases', () => {
     // Exercises `BUG_STATUS_LABELS[r.status] || r.status` and
     // `BUG_STATUS_COLORS[r.status] || ''` fallback branches.
     renderAdminWith({ bugReports: [REPORT_UNKNOWN_STATUS] })
-    await screen.findByText('Mystery bug')
+    clickTab('Bug Reports')
+    await screen.findAllByText('Mystery bug')
     // 'pending' is not a key in BUG_STATUS_LABELS — raw value is displayed
-    expect(screen.getByText('pending')).toBeInTheDocument()
+    expect(screen.getAllByText('pending').length).toBeGreaterThan(0)
   })
 })
 
@@ -286,9 +322,9 @@ describe('Admin — audit log table edge cases', () => {
     // LOG_WITH_TARGET: target_id truthy → truncated form; details null → '—'
     // SAMPLE_LOG: target_id null → '—'; details {} → '{}' (JSON)
     renderAdminWith({ auditLogs: [SAMPLE_LOG, LOG_WITH_TARGET] })
-    fireEvent.click(screen.getByRole('button', { name: /audit logs/i }))
-    await screen.findByText('user.ban')
-    // target_id 'abc123def456789' sliced to 8 chars + ellipsis
-    expect(screen.getByText('abc123de…')).toBeInTheDocument()
+    clickTab('Audit Logs')
+    await screen.findAllByText('user.ban')
+    // target_id 'abc123def456789' sliced to 8 chars
+    expect(screen.getAllByText('abc123de').length).toBeGreaterThan(0)
   })
 })
