@@ -23,7 +23,7 @@ def upgrade() -> None:
     op.create_index('ix_games_scoring_completed', 'games', ['scoring_completed'])
     # Backfill: mark all existing FINAL games as scored (they were scored
     # under the old logic, or their scoring window has passed).
-    op.execute("UPDATE games SET scoring_completed = true WHERE status = 'final'")
+    op.execute("UPDATE games SET scoring_completed = true WHERE status = 'final'::gamestatus")
 
 
 def downgrade() -> None:
