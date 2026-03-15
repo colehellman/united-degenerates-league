@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -37,6 +37,10 @@ class User(Base):
 
     # Account deletion
     deletion_requested_at = Column(DateTime, nullable=True)
+
+    # Brute-force protection
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    locked_until = Column(DateTime, nullable=True)
 
     # Onboarding
     has_dismissed_onboarding = Column(Boolean, default=False, nullable=False)

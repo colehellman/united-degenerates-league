@@ -35,12 +35,15 @@ class LeaderboardEntry(BaseModel):
 
 
 class ParticipantWithUserResponse(BaseModel):
-    """Participant record joined with basic user info, used in admin views."""
+    """Participant record joined with basic user info, used in admin views.
+
+    Deliberately omits email — competition admins are not global admins
+    and should not see other users' email addresses.
+    """
 
     id: UUID4
     user_id: UUID4
     username: str
-    email: str
     joined_at: datetime
     total_points: int
     total_wins: int

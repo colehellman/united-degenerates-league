@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 SCORE_CHANNEL = "score_updates"
 
+# Maximum concurrent WebSocket connections to prevent resource exhaustion.
+# Each connection holds an open TCP socket + asyncio task.
+MAX_WS_CONNECTIONS = 500
+
 
 class ScoreManager:
     """Manages WebSocket connections and bridges Redis pub/sub to clients."""
@@ -30,6 +34,10 @@ class ScoreManager:
     # ── WebSocket connection management ────────────────────────────
 
     async def connect(self, websocket: WebSocket):
+        if len(self._connections) >= MAX_WS_CONNECTIONS:
+            await websocket.close(code=1013, reason="Server at capacity")
+            logger.warning(f"WS connection rejected: at capacity ({MAX_WS_CONNECTIONS})")
+            return
         await websocket.accept()
         self._connections.append(websocket)
         logger.info(f"WS client connected. Total: {len(self._connections)}")

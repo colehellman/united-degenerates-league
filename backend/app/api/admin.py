@@ -259,14 +259,18 @@ async def get_audit_logs(
 
 @router.get("/users", response_model=List[UserResponse])
 async def list_all_users(
+    limit: int = 100,
+    offset: int = 0,
     current_user: User = Depends(get_current_global_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all non-deleted users on the platform (global admin only)."""
+    """List all non-deleted users on the platform (paginated, global admin only)."""
     result = await db.execute(
         select(User)
         .where(User.status != AccountStatus.DELETED)
         .order_by(User.created_at.desc())
+        .limit(min(limit, 500))
+        .offset(offset)
     )
     users = result.scalars().all()
     return [UserResponse.model_validate(u) for u in users]
@@ -310,7 +314,6 @@ async def list_competition_participants(
             id=p.id,
             user_id=p.user_id,
             username=u.username,
-            email=u.email,
             joined_at=p.joined_at,
             total_points=p.total_points,
             total_wins=p.total_wins,

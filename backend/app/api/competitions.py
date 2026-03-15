@@ -632,9 +632,11 @@ async def sync_competition_games(
         await db.commit()
     except Exception as exc:
         await db.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"Game sync failed for competition {competition_id}: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"ESPN sync failed: {str(exc)}",
+            detail="Game sync failed. Please try again later.",
         )
 
     return sync_result
