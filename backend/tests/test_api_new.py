@@ -182,17 +182,17 @@ async def test_join_competition_already_participant(
     assert "already a participant" in resp.json()["detail"].lower()
 
 @pytest.mark.asyncio
-async def test_update_competition_forbidden(
+async def test_update_competition_as_league_admin(
     client: AsyncClient, test_user: User, active_competition: Competition
 ):
-    """PATCH /competitions/{id} returns 403 for non-admin users."""
+    """PATCH /competitions/{id} returns 200 for league admin (test_user is in league_admin_ids)."""
     token = await _login(client)
     resp = await client.patch(
         f"/api/competitions/{active_competition.id}",
         headers={"Authorization": f"Bearer {token}"},
         json={"name": "New Name"}
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 200
 
 @pytest.mark.asyncio
 async def test_delete_competition_forbidden(

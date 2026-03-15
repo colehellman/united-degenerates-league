@@ -240,29 +240,29 @@ def test_deserialize_invalid_json_returns_empty(sports_service):
     assert result == []
 
 
-def test_get_from_cache_redis_error_returns_none(sports_service, mock_redis_client):
+async def test_get_from_cache_redis_error_returns_none(sports_service, mock_redis_client):
     """_get_from_cache swallows Redis errors and returns None."""
     mock_redis_client.get.side_effect = Exception("redis down")
-    result = sports_service._get_from_cache("any_key")
+    result = await sports_service._get_from_cache("any_key")
     assert result is None
 
 
-def test_set_cache_redis_error_is_silenced(sports_service, mock_redis_client):
+async def test_set_cache_redis_error_is_silenced(sports_service, mock_redis_client):
     """_set_cache swallows Redis errors without raising."""
     mock_redis_client.setex.side_effect = Exception("redis down")
-    sports_service._set_cache("key", "value", 60)  # should not raise
+    await sports_service._set_cache("key", "value", 60)  # should not raise
 
 
-def test_get_from_cache_no_redis(sports_service):
+async def test_get_from_cache_no_redis(sports_service):
     """_get_from_cache returns None when redis_client is None."""
     sports_service.redis_client = None
-    assert sports_service._get_from_cache("key") is None
+    assert await sports_service._get_from_cache("key") is None
 
 
-def test_set_cache_no_redis(sports_service):
+async def test_set_cache_no_redis(sports_service):
     """_set_cache is a no-op when redis_client is None."""
     sports_service.redis_client = None
-    sports_service._set_cache("key", "val", 60)  # should not raise
+    await sports_service._set_cache("key", "val", 60)  # should not raise
 
 
 # ---------------------------------------------------------------------------
