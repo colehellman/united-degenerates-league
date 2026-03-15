@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -343,7 +344,14 @@ async def create_fixed_team_selections_batch(
         db.add(selection)
         created_selections.append(selection)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="One or more selections were already taken by another user",
+        )
 
     # Refresh all selections
     for selection in created_selections:
