@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict
 from datetime import datetime
+import asyncio
 import logging
 import json
 import redis
@@ -295,8 +296,7 @@ class SportsDataService:
         if not self.redis_client:
             return None
         try:
-            import asyncio
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             value = await loop.run_in_executor(None, self.redis_client.get, key)
             return value
         except Exception as e:
@@ -308,8 +308,7 @@ class SportsDataService:
         if not self.redis_client:
             return
         try:
-            import asyncio
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self.redis_client.setex, key, ttl, value)
         except Exception as e:
             logger.error(f"Redis set error: {e}")

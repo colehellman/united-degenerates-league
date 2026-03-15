@@ -1,6 +1,6 @@
 """add unique constraint on game competition_id and external_id
 
-Revision ID: b2c3d4e5f6g7
+Revision ID: 83f04277ba07
 Revises: a1b2c3d4e5f6
 Create Date: 2026-03-14
 
@@ -11,8 +11,8 @@ from alembic import op
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'b2c3d4e5f6g7'
-down_revision: Union[str, None] = 'a1b2c3d4e5f6'
+revision: str = '83f04277ba07'
+down_revision: Union[str, None] = '2a5933ecc3a6'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

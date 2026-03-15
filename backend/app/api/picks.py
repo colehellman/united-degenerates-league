@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from typing import Dict, List, Optional
 from datetime import datetime
+import logging
 
 from app.core.deps import get_db, get_current_user
 from app.models.user import User
@@ -21,6 +22,8 @@ from app.schemas.pick import (
     FixedTeamSelectionBatchCreate,
     FixedTeamSelectionResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -352,12 +355,19 @@ async def create_fixed_team_selections_batch(
 
     try:
         await db.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="One or more selections were already taken by another user",
+        logger.warning(
+            f"IntegrityError during fixed team selection for user {current_user.id}, "
+            f"competition {competition_id}: {e.orig}",
         )
+        error_str = str(e.orig) if e.orig else str(e)
+        if "uq_fixed_selection_competition_team" in error_str or "uq_fixed_selection_competition_golfer" in error_str:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="One or more selections were already taken by another user",
+            )
+        raise
 
     # Refresh all selections
     for selection in created_selections:
