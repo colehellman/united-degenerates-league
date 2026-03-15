@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api from '../services/api'
+import { extractErrorMessage } from '../utils/errors'
 
 interface BugReportModalProps {
   isOpen: boolean
@@ -29,13 +30,8 @@ export default function BugReportModal({ isOpen, onClose }: BugReportModalProps)
       toast.success('Bug report submitted — thanks!')
       handleClose()
     },
-    onError: (err: any) => {
-      const detail = err.response?.data?.detail
-      if (Array.isArray(detail)) {
-        setError(detail.map((e: any) => e.msg).join('; '))
-      } else {
-        setError(detail || err.message || 'Submission failed')
-      }
+    onError: (err: unknown) => {
+      setError(extractErrorMessage(err))
     },
   })
 
