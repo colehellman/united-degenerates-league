@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from typing import Dict, List, Optional
 from datetime import datetime
+import logging
 
 from app.core.deps import get_db, get_current_user
 from app.models.user import User
@@ -20,6 +22,8 @@ from app.schemas.pick import (
     FixedTeamSelectionBatchCreate,
     FixedTeamSelectionResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -55,14 +59,19 @@ async def create_daily_picks_batch(
             detail="Competition not found or not in Daily Picks mode",
         )
 
-    # Verify user is participant
+    # Verify user is participant and lock the row to serialize concurrent pick
+    # submissions for the same user+competition.  Without this lock two
+    # requests that both pass the max_picks_per_day check in parallel can
+    # over-submit picks before either commits.
     participant_result = await db.execute(
-        select(Participant).where(
+        select(Participant)
+        .where(
             and_(
                 Participant.competition_id == competition.id,
                 Participant.user_id == current_user.id,
             )
         )
+        .with_for_update()
     )
     participant = participant_result.scalar_one_or_none()
     if not participant:
@@ -265,7 +274,7 @@ async def create_fixed_team_selections_batch(
             detail="Selection phase has ended",
         )
 
-    # Verify user is participant
+    # Verify user is participant (lock row to prevent concurrent oversubmission)
     participant_result = await db.execute(
         select(Participant).where(
             and_(
@@ -273,6 +282,7 @@ async def create_fixed_team_selections_batch(
                 Participant.user_id == current_user.id,
             )
         )
+        .with_for_update()
     )
     if not participant_result.scalar_one_or_none():
         raise HTTPException(
@@ -343,7 +353,21 @@ async def create_fixed_team_selections_batch(
         db.add(selection)
         created_selections.append(selection)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+        logger.warning(
+            f"IntegrityError during fixed team selection for user {current_user.id}, "
+            f"competition {competition_id}: {e.orig}",
+        )
+        error_str = str(e.orig) if e.orig else str(e)
+        if "uq_fixed_selection_competition_team" in error_str or "uq_fixed_selection_competition_golfer" in error_str:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="One or more selections were already taken by another user",
+            )
+        raise
 
     # Refresh all selections
     for selection in created_selections:

@@ -69,6 +69,15 @@ async def recalculate_participant_stats(db, user_id, competition_id):
     total_picks = total_wins + total_losses
     accuracy = (total_wins / total_picks * 100.0) if total_picks > 0 else 0.0
 
+    # Calculate current streak (consecutive correct picks, most recent first)
+    streak_picks = sorted(picks, key=lambda p: p.created_at, reverse=True)
+    current_streak = 0
+    for pick in streak_picks:
+        if pick.is_correct is True:
+            current_streak += 1
+        else:
+            break
+
     # Update participant record
     stmt = (
         update(Participant)
@@ -83,6 +92,7 @@ async def recalculate_participant_stats(db, user_id, competition_id):
             total_wins=total_wins,
             total_losses=total_losses,
             accuracy_percentage=accuracy,
+            current_streak=current_streak,
         )
     )
     await db.execute(stmt)

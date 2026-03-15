@@ -26,5 +26,6 @@ async def scores_websocket(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         score_manager.disconnect(websocket)
-    except Exception:
+    except Exception as e:
+        logger.error(f"WebSocket error: {type(e).__name__}: {e}", exc_info=True)
         score_manager.disconnect(websocket)

@@ -254,8 +254,8 @@ async def get_competition(
 
     # Check if user is admin
     is_admin = (
-        str(current_user.id) in competition.league_admin_ids
-        or current_user.role == "global_admin"
+        current_user.id in competition.league_admin_ids
+        or current_user.role == UserRole.GLOBAL_ADMIN
     )
 
     response = CompetitionResponse.model_validate(competition)
@@ -287,8 +287,8 @@ async def update_competition(
 
     # Check if user is admin
     is_admin = (
-        str(current_user.id) in competition.league_admin_ids
-        or current_user.role == "global_admin"
+        current_user.id in competition.league_admin_ids
+        or current_user.role == UserRole.GLOBAL_ADMIN
     )
 
     if not is_admin:
@@ -453,7 +453,13 @@ async def get_competition_games(
     # Filter by date if provided, adjusting for the client's local timezone.
     # Games are stored as naive UTC. The client sends utc_offset_minutes
     # (JS Date.getTimezoneOffset()) so we can convert "local midnight–midnight"
-    # to the correct UTC range. E.g. UTC-5 (EST) offset=300:
+    # to the correct UTC range.
+    #
+    # JS getTimezoneOffset() convention: UTC = local + offset.
+    # So UTC-5 (Eastern Standard) returns +300, UTC+1 returns -60, etc.
+    # To find UTC midnight from local midnight: utc = local + timedelta(minutes=offset).
+    #
+    # E.g. UTC-5 (EST) offset=300:
     #   local 2026-03-08 00:00 → UTC 2026-03-08 05:00
     #   local 2026-03-08 23:59 → UTC 2026-03-09 04:59
     if date:

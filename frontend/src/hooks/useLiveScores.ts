@@ -53,8 +53,10 @@ export function useLiveScores() {
             return next
           })
         }
-      } catch {
-        // Ignore malformed messages
+      } catch (e) {
+        if (import.meta.env.DEV) {
+          console.warn('Failed to parse WebSocket message:', e)
+        }
       }
     }
 

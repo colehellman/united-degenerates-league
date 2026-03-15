@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from app.core.deps import get_db, get_current_user
 from app.models.user import User
-from app.models.competition import Competition
+from app.models.competition import Competition, Visibility
 from app.models.participant import Participant
 from app.schemas.participant import LeaderboardEntry
 
@@ -32,7 +32,7 @@ async def get_leaderboard(
             detail="Competition not found",
         )
 
-    if competition.visibility == "private":
+    if competition.visibility == Visibility.PRIVATE:
         participant_result = await db.execute(
             select(Participant).where(
                 and_(

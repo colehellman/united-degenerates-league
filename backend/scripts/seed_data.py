@@ -11,6 +11,8 @@ This script populates the database with:
 Run with: python -m scripts.seed_data
 """
 import asyncio
+import os
+import sys
 import uuid
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -388,6 +390,10 @@ async def create_sample_competitions(db: AsyncSession, leagues_data, users):
 
 async def main():
     """Main seed function"""
+    if os.getenv("ENVIRONMENT") == "production":
+        print("ERROR: seed_data.py must not run in production!")
+        sys.exit(1)
+
     print("=" * 60)
     print("UNITED DEGENERATES LEAGUE - DATABASE SEED")
     print("=" * 60)

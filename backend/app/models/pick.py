@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Boolean, DateTime, ForeignKey, Integer, CheckConstraint
+from sqlalchemy import Column, Boolean, DateTime, ForeignKey, Integer, CheckConstraint, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -78,4 +78,7 @@ class FixedTeamSelection(Base):
     __table_args__ = (
         # Must have either team_id or golfer_id, but not both
         CheckConstraint("(team_id IS NOT NULL AND golfer_id IS NULL) OR (team_id IS NULL AND golfer_id IS NOT NULL)"),
+        # Enforce exclusivity: only one user can select a given team or golfer per competition
+        UniqueConstraint('competition_id', 'team_id', name='uq_fixed_selection_competition_team'),
+        UniqueConstraint('competition_id', 'golfer_id', name='uq_fixed_selection_competition_golfer'),
     )

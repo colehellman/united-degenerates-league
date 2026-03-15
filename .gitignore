@@ -457,3 +457,4 @@ site/
 !.env.example
 !.env.sample
 !example.env
+.worktrees/

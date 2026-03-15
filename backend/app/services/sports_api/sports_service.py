@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict
 from datetime import datetime
+import asyncio
 import logging
 import json
 import redis
@@ -84,7 +85,7 @@ class SportsDataService:
 
         # Try cache first
         if use_cache:
-            cached = self._get_from_cache(cache_key)
+            cached = await self._get_from_cache(cache_key)
             if cached:
                 logger.info(f"SportsDataService: Cache hit for {cache_key}")
                 return self._deserialize_games(cached)
@@ -113,7 +114,7 @@ class SportsDataService:
                     )
 
                     # Cache the result
-                    self._set_cache(
+                    await self._set_cache(
                         cache_key,
                         self._serialize_games(games),
                         ttl=settings.CACHE_SCHEDULE_SECONDS,
@@ -164,7 +165,7 @@ class SportsDataService:
 
         # Try cache first (short TTL for live data)
         if use_cache:
-            cached = self._get_from_cache(cache_key)
+            cached = await self._get_from_cache(cache_key)
             if cached:
                 logger.debug(f"SportsDataService: Cache hit for {cache_key}")
                 return self._deserialize_games(cached)
@@ -192,7 +193,7 @@ class SportsDataService:
                     )
 
                     # Cache with short TTL for live data
-                    self._set_cache(
+                    await self._set_cache(
                         cache_key,
                         self._serialize_games(games),
                         ttl=settings.CACHE_SCORES_SECONDS,
@@ -242,7 +243,7 @@ class SportsDataService:
 
         # Try cache first
         if use_cache:
-            cached = self._get_from_cache(cache_key)
+            cached = await self._get_from_cache(cache_key)
             if cached:
                 logger.debug(f"SportsDataService: Cache hit for {cache_key}")
                 games = self._deserialize_games(cached)
@@ -265,7 +266,7 @@ class SportsDataService:
                     )
 
                     # Cache the result
-                    self._set_cache(
+                    await self._set_cache(
                         cache_key,
                         self._serialize_games([game]),
                         ttl=settings.CACHE_SCORES_SECONDS,
@@ -290,25 +291,25 @@ class SportsDataService:
             "cache_status": "connected" if self.redis_client else "disconnected",
         }
 
-    def _get_from_cache(self, key: str) -> Optional[str]:
-        """Get value from Redis cache"""
+    async def _get_from_cache(self, key: str) -> Optional[str]:
+        """Get value from Redis cache (runs sync client in executor to avoid blocking)"""
         if not self.redis_client:
             return None
-
         try:
-            value = self.redis_client.get(key)
+            loop = asyncio.get_running_loop()
+            value = await loop.run_in_executor(None, self.redis_client.get, key)
             return value
         except Exception as e:
             logger.error(f"Redis get error: {e}")
             return None
 
-    def _set_cache(self, key: str, value: str, ttl: int):
-        """Set value in Redis cache with TTL"""
+    async def _set_cache(self, key: str, value: str, ttl: int):
+        """Set value in Redis cache with TTL (runs sync client in executor to avoid blocking)"""
         if not self.redis_client:
             return
-
         try:
-            self.redis_client.setex(key, ttl, value)
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self.redis_client.setex, key, ttl, value)
         except Exception as e:
             logger.error(f"Redis set error: {e}")
 

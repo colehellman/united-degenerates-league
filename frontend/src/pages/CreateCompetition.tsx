@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '../services/api'
+import { extractErrorMessage } from '../utils/errors'
 
 interface League {
   id: string
@@ -76,8 +77,8 @@ export default function CreateCompetition() {
         description: description || null,
         mode,
         league_id: leagueId,
-        start_date: new Date(startDate).toISOString(),
-        end_date: new Date(endDate).toISOString(),
+        start_date: startDate,
+        end_date: endDate,
         visibility,
         join_type: joinType,
         max_participants: maxParticipants ? parseInt(maxParticipants) : null,
@@ -93,16 +94,8 @@ export default function CreateCompetition() {
 
       const response = await api.post('/competitions', payload)
       navigate(`/competitions/${response.data.id}`)
-    } catch (err: any) {
-      const detail = err.response?.data?.detail
-      if (Array.isArray(detail)) {
-        // Pydantic 422 validation errors — extract human-readable messages
-        setError(detail.map((e: any) => e.msg).join('; '))
-      } else if (typeof detail === 'string') {
-        setError(detail)
-      } else {
-        setError(err.message || 'Failed to create competition')
-      }
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err))
     } finally {
       setLoading(false)
     }

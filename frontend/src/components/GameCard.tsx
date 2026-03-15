@@ -8,7 +8,7 @@ interface GameCardProps {
   onPickChange: (gameId: string, teamId: string) => void
 }
 
-const GameCard: React.FC<GameCardProps> = ({ game, userPick, onPickChange }) => {
+const GameCard: React.FC<GameCardProps> = React.memo(function GameCard({ game, userPick, onPickChange }) {
   const locked = isGameLocked(game)
 
   // Helper for team card styling.
@@ -44,6 +44,8 @@ const GameCard: React.FC<GameCardProps> = ({ game, userPick, onPickChange }) => 
         {/* Away Team */}
         <div
           role="button"
+          aria-pressed={userPick === game.away_team.id}
+          aria-disabled={locked}
           tabIndex={locked ? undefined : 0}
           onClick={() => !locked && onPickChange(game.id, game.away_team.id)}
           onKeyDown={(e) => {
@@ -61,7 +63,7 @@ const GameCard: React.FC<GameCardProps> = ({ game, userPick, onPickChange }) => 
           )}
           {game.spread !== null && game.spread !== undefined && (
             <div className="text-xs text-gray-500 mt-0.5">
-              Spread: {game.spread < 0 ? '+' : '-'}{Math.abs(game.spread)}
+              Spread: {-game.spread > 0 ? '+' : ''}{-game.spread}
             </div>
           )}
           {game.away_team_score !== null && game.away_team_score !== undefined && (
@@ -72,6 +74,8 @@ const GameCard: React.FC<GameCardProps> = ({ game, userPick, onPickChange }) => 
         {/* Home Team */}
         <div
           role="button"
+          aria-pressed={userPick === game.home_team.id}
+          aria-disabled={locked}
           tabIndex={locked ? undefined : 0}
           onClick={() => !locked && onPickChange(game.id, game.home_team.id)}
           onKeyDown={(e) => {
@@ -113,6 +117,6 @@ const GameCard: React.FC<GameCardProps> = ({ game, userPick, onPickChange }) => 
       )}
     </div>
   )
-}
+})
 
 export default GameCard
