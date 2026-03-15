@@ -254,8 +254,8 @@ async def get_competition(
 
     # Check if user is admin
     is_admin = (
-        str(current_user.id) in competition.league_admin_ids
-        or current_user.role == "global_admin"
+        current_user.id in competition.league_admin_ids
+        or current_user.role == UserRole.GLOBAL_ADMIN
     )
 
     response = CompetitionResponse.model_validate(competition)
@@ -287,8 +287,8 @@ async def update_competition(
 
     # Check if user is admin
     is_admin = (
-        str(current_user.id) in competition.league_admin_ids
-        or current_user.role == "global_admin"
+        current_user.id in competition.league_admin_ids
+        or current_user.role == UserRole.GLOBAL_ADMIN
     )
 
     if not is_admin:

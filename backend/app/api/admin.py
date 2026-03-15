@@ -5,7 +5,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.core.deps import get_db, get_current_user, get_current_global_admin
-from app.models.user import User, AccountStatus
+from app.models.user import User, AccountStatus, UserRole
 from app.models.competition import Competition
 from app.models.participant import JoinRequest, JoinRequestStatus, Participant
 from app.models.audit_log import AuditLog, AuditAction
@@ -35,7 +35,7 @@ async def get_join_requests(
     # Check if user is admin
     is_admin = (
         current_user.id in competition.league_admin_ids
-        or current_user.role == "global_admin"
+        or current_user.role == UserRole.GLOBAL_ADMIN
     )
 
     if not is_admin:
@@ -87,7 +87,7 @@ async def approve_join_request(
     # Check if user is admin
     is_admin = (
         current_user.id in competition.league_admin_ids
-        or current_user.role == "global_admin"
+        or current_user.role == UserRole.GLOBAL_ADMIN
     )
 
     if not is_admin:
@@ -152,7 +152,7 @@ async def reject_join_request(
     # Check if user is admin
     is_admin = (
         current_user.id in competition.league_admin_ids
-        or current_user.role == "global_admin"
+        or current_user.role == UserRole.GLOBAL_ADMIN
     )
 
     if not is_admin:
@@ -211,7 +211,7 @@ async def get_audit_logs(
     query = select(AuditLog)
 
     # If not global admin, filter by competitions where user is admin
-    if current_user.role != "global_admin":
+    if current_user.role != UserRole.GLOBAL_ADMIN:
         # Get competitions where user is admin
         comp_query = select(Competition.id).where(
             Competition.league_admin_ids.contains([current_user.id])
@@ -289,7 +289,7 @@ async def list_competition_participants(
 
     is_admin = (
         current_user.id in competition.league_admin_ids
-        or current_user.role == "global_admin"
+        or current_user.role == UserRole.GLOBAL_ADMIN
     )
     if not is_admin:
         raise HTTPException(
