@@ -44,6 +44,8 @@ const GameCard: React.FC<GameCardProps> = ({ game, userPick, onPickChange }) => 
         {/* Away Team */}
         <div
           role="button"
+          aria-pressed={userPick === game.away_team.id}
+          aria-disabled={locked}
           tabIndex={locked ? undefined : 0}
           onClick={() => !locked && onPickChange(game.id, game.away_team.id)}
           onKeyDown={(e) => {
@@ -72,6 +74,8 @@ const GameCard: React.FC<GameCardProps> = ({ game, userPick, onPickChange }) => 
         {/* Home Team */}
         <div
           role="button"
+          aria-pressed={userPick === game.home_team.id}
+          aria-disabled={locked}
           tabIndex={locked ? undefined : 0}
           onClick={() => !locked && onPickChange(game.id, game.home_team.id)}
           onKeyDown={(e) => {
