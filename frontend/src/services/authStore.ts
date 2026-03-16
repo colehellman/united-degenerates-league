@@ -27,7 +27,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isInitializing: true,
 
   login: async (email, password) => {
-    const response = await api.post('/auth/login', { email, password })
+    const response = await api.post('/auth/login', { email, password }, { _skipToast: true })
     // Store tokens so they survive page reloads on mobile Safari where ITP
     // blocks cross-origin SameSite=None cookies from onrender.com subdomains.
     // access_token → module memory (Bearer header injection via interceptor)
@@ -42,7 +42,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   register: async (email, username, password) => {
-    const response = await api.post('/auth/register', { email, username, password })
+    const response = await api.post('/auth/register', { email, username, password }, { _skipToast: true })
     setAccessToken(response.data.access_token)
     setRefreshToken(response.data.refresh_token)
     suppressRefreshRedirect()

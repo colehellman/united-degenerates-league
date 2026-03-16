@@ -3,6 +3,9 @@ import { Component, ErrorInfo, ReactNode } from 'react'
 interface Props {
   children: ReactNode
   fallback?: ReactNode
+  /** When this value changes, the error state is cleared.
+   *  Pass `location.pathname` to auto-reset on navigation. */
+  resetKey?: string
 }
 
 interface State {
@@ -26,9 +29,15 @@ export class ErrorBoundary extends Component<Props, State> {
     }
   }
 
+  componentDidUpdate(prevProps: Props) {
+    // Reset error state when resetKey changes (e.g. on route navigation)
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false, error: null })
+    }
+  }
+
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo)
-    // TODO: Send to error tracking service (e.g., Sentry)
   }
 
   handleReset = () => {

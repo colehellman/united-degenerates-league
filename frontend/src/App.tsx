@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './services/authStore'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
@@ -11,8 +11,19 @@ import Admin from './pages/Admin'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 
+function NotFound() {
+  return (
+    <div className="text-center py-16">
+      <h2 className="text-4xl font-bold text-gray-900 mb-2">404</h2>
+      <p className="text-gray-600 mb-6">Page not found</p>
+      <a href="/" className="btn btn-primary">Go to Dashboard</a>
+    </div>
+  )
+}
+
 function App() {
   const { isAuthenticated, isInitializing, checkAuth } = useAuthStore()
+  const location = useLocation()
 
   useEffect(() => {
     // Validate the httpOnly cookie on every app load. Without this, refreshing
@@ -44,7 +55,7 @@ function App() {
   }
 
   return (
-    <ErrorBoundary>
+    <ErrorBoundary resetKey={location.pathname}>
       <Routes>
         <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <Login />} />
         <Route path="/register" element={isAuthenticated ? <Navigate to="/" /> : <Register />} />
@@ -55,6 +66,7 @@ function App() {
           <Route path="/competitions/create" element={isAuthenticated ? <CreateCompetition /> : <Navigate to="/login" />} />
           <Route path="/competitions/:id" element={isAuthenticated ? <CompetitionDetail /> : <Navigate to="/login" />} />
           <Route path="/admin" element={isAuthenticated ? <Admin /> : <Navigate to="/login" />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
     </ErrorBoundary>

@@ -1,12 +1,32 @@
 # Render Blueprint — one-click deploy
 # https://render.com/docs/blueprint-spec
 #
-# Prerequisites (set up before deploying):
-#   1. Neon Postgres — https://neon.tech (free, 0.5GB)
-#   2. Upstash Redis  — https://upstash.com (free, 10k cmds/day)
-#
-# After creating those, plug the connection strings into the
-# environment variables below via the Render dashboard.
+# ┌──────────────────────────────────────────────────────────┐
+# │  SETUP (do these BEFORE clicking "New Blueprint"):       │
+# │                                                          │
+# │  1. Create a free Neon Postgres DB:                      │
+# │     https://neon.tech → New Project → copy the           │
+# │     "connection string" (starts with postgresql://)      │
+# │                                                          │
+# │  2. Create a free Upstash Redis:                         │
+# │     https://upstash.com → New Database → copy the        │
+# │     "Redis URL" (starts with redis:// or rediss://)      │
+# │                                                          │
+# │  AFTER FIRST DEPLOY:                                     │
+# │                                                          │
+# │  3. In Render dashboard → udl-api → Environment:         │
+# │     - DATABASE_URL = your Neon connection string          │
+# │     - REDIS_URL    = your Upstash Redis URL               │
+# │     - CORS_ORIGINS = https://udl-frontend.onrender.com   │
+# │       (use your actual frontend URL from step 5)         │
+# │                                                          │
+# │  4. In Render dashboard → udl-frontend → Environment:    │
+# │     - VITE_API_URL = https://udl-api.onrender.com        │
+# │       (use your actual backend URL from step 3)          │
+# │                                                          │
+# │  5. Redeploy BOTH services after setting env vars.       │
+# │     Frontend MUST be rebuilt for VITE_API_URL to work.   │
+# └──────────────────────────────────────────────────────────┘
 
 services:
   # ── Backend API ──────────────────────────────────────────
@@ -24,11 +44,11 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: DATABASE_URL
-        sync: false  # Must be set manually — paste your Neon connection string
+        sync: false  # REQUIRED — paste your Neon connection string (postgresql://...)
       - key: REDIS_URL
-        sync: false  # Must be set manually — paste your Upstash Redis URL
+        sync: false  # REQUIRED — paste your Upstash Redis URL (redis://...)
       - key: CORS_ORIGINS
-        sync: false  # Set to your frontend URL after first deploy
+        sync: false  # REQUIRED — your frontend URL, e.g. https://udl-frontend.onrender.com
       - key: DISABLE_BACKGROUND_JOBS
         value: "false"  # Jobs run in-process on free tier (single instance)
       - key: SENTRY_DSN
@@ -48,6 +68,14 @@ services:
       - path: /*
         name: X-Frame-Options
         value: DENY
+      # Prevent browsers from caching index.html — ensures users get
+      # new JS bundles after each deploy instead of a stale SPA shell.
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache, must-revalidate
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
     routes:
       # SPA fallback — all paths serve index.html
       - type: rewrite
@@ -55,4 +83,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        sync: false  # Set to your backend URL after first deploy
+        sync: false  # REQUIRED — your backend URL, e.g. https://udl-api.onrender.com

@@ -20,7 +20,11 @@ export default function Login() {
       await login(email, password)
       navigate('/')
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Login failed')
+      if (!err.response && (err.code === 'ERR_NETWORK' || err.code === 'ECONNABORTED')) {
+        setError('Cannot reach the server. It may be starting up — please try again in a moment.')
+      } else {
+        setError(err.response?.data?.detail || 'Login failed')
+      }
     } finally {
       setLoading(false)
     }
