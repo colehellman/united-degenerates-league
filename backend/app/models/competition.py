@@ -81,3 +81,4 @@ class Competition(Base):
     picks = relationship("Pick", back_populates="competition", cascade="all, delete-orphan")
     fixed_team_selections = relationship("FixedTeamSelection", back_populates="competition", cascade="all, delete-orphan")
     join_requests = relationship("JoinRequest", back_populates="competition", cascade="all, delete-orphan")
+    invite_links = relationship("InviteLink", back_populates="competition", cascade="all, delete-orphan")

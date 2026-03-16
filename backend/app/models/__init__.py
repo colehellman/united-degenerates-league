@@ -6,6 +6,7 @@ from app.models.pick import Pick, FixedTeamSelection
 from app.models.participant import Participant, JoinRequest
 from app.models.audit_log import AuditLog
 from app.models.bug_report import BugReport, BugReportStatus, BugReportCategory
+from app.models.invite_link import InviteLink
 
 __all__ = [
     "User",
@@ -22,4 +23,5 @@ __all__ = [
     "BugReport",
     "BugReportStatus",
     "BugReportCategory",
+    "InviteLink",
 ]
