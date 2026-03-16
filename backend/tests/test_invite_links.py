@@ -211,3 +211,120 @@ async def test_non_participant_cannot_create_invite(
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 403
+
+
+# ── GET /api/competitions/{id}/invite-links — List Endpoint ──────────────
+
+
+@pytest.mark.asyncio
+async def test_participant_sees_own_links_only(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    active_competition: Competition,
+    test_user: User,
+    second_user: User,
+    participant: Participant,
+):
+    """A regular participant should only see their own invite links."""
+    p2 = Participant(user_id=second_user.id, competition_id=active_competition.id)
+    db_session.add(p2)
+    await db_session.commit()
+
+    link_user1 = InviteLink(
+        competition_id=active_competition.id,
+        created_by_user_id=test_user.id,
+        is_admin_invite=True,
+    )
+    link_user2 = InviteLink(
+        competition_id=active_competition.id,
+        created_by_user_id=second_user.id,
+        is_admin_invite=False,
+    )
+    db_session.add_all([link_user1, link_user2])
+    await db_session.commit()
+
+    token = await _login(client, email="second@example.com")
+    resp = await client.get(
+        f"/api/competitions/{active_competition.id}/invite-links",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["is_admin_invite"] is False
+
+
+@pytest.mark.asyncio
+async def test_admin_sees_all_links(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    active_competition: Competition,
+    test_user: User,
+    second_user: User,
+    participant: Participant,
+):
+    """An admin should see all invite links for the competition."""
+    p2 = Participant(user_id=second_user.id, competition_id=active_competition.id)
+    db_session.add(p2)
+    await db_session.commit()
+
+    link_admin = InviteLink(
+        competition_id=active_competition.id,
+        created_by_user_id=test_user.id,
+        is_admin_invite=True,
+    )
+    link_user = InviteLink(
+        competition_id=active_competition.id,
+        created_by_user_id=second_user.id,
+        is_admin_invite=False,
+    )
+    db_session.add_all([link_admin, link_user])
+    await db_session.commit()
+
+    token = await _login(client)
+    resp = await client.get(
+        f"/api/competitions/{active_competition.id}/invite-links",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+
+
+@pytest.mark.asyncio
+async def test_list_links_sorted_by_created_at_desc(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    active_competition: Competition,
+    test_user: User,
+    participant: Participant,
+):
+    """Links should be returned sorted by created_at DESC (most recent first)."""
+    link1 = InviteLink(
+        competition_id=active_competition.id,
+        created_by_user_id=test_user.id,
+        is_admin_invite=True,
+    )
+    db_session.add(link1)
+    await db_session.commit()
+    await db_session.refresh(link1)
+
+    link2 = InviteLink(
+        competition_id=active_competition.id,
+        created_by_user_id=test_user.id,
+        is_admin_invite=True,
+    )
+    db_session.add(link2)
+    await db_session.commit()
+    await db_session.refresh(link2)
+
+    token = await _login(client)
+    resp = await client.get(
+        f"/api/competitions/{active_competition.id}/invite-links",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    assert data[0]["token"] == link2.token
+    assert data[1]["token"] == link1.token
