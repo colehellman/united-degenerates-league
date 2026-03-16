@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import api from '../services/api'
+import api, { createInviteLink, listInviteLinks } from '../services/api'
 import GameCard from '../components/GameCard'
 import Leaderboard from '../components/Leaderboard'
 import Spinner from '../components/Spinner'
@@ -34,6 +34,7 @@ export default function CompetitionDetail() {
   const [fixedSelections, setFixedSelections] = useState<string[]>([]) // team_ids or golfer_ids
   const [error, setError] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [inviteCopied, setInviteCopied] = useState(false)
 
   const { data: competition, isLoading: compLoading } = useQuery({
     queryKey: ['competition', id],
@@ -52,6 +53,33 @@ export default function CompetitionDetail() {
     enabled: !!competition?.user_is_participant,
     refetchInterval: 30000, // Refetch every 30s for live updates
   })
+
+  const { data: inviteLinks } = useQuery({
+    queryKey: ['invite-links', id],
+    queryFn: () => listInviteLinks(id!),
+    enabled: !!competition?.user_is_participant,
+  })
+
+  const createInviteMutation = useMutation({
+    mutationFn: () => createInviteLink(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invite-links', id] })
+    },
+  })
+
+  const latestInviteLink = inviteLinks?.[0]
+  const inviteUrl = latestInviteLink
+    ? `${window.location.origin}/invite/${latestInviteLink.token}`
+    : null
+
+  const handleCopyInvite = () => {
+    if (inviteUrl) {
+      navigator.clipboard.writeText(inviteUrl)
+      setInviteCopied(true)
+      toast.success('Invite link copied!')
+      setTimeout(() => setInviteCopied(false), 2000)
+    }
+  }
 
   // Fetch available games for daily picks.
   // Pass utc_offset_minutes so the backend converts the local date window to
@@ -468,6 +496,39 @@ export default function CompetitionDetail() {
 
       {competition.user_is_participant ? (
         <>
+          {/* Invite Friends */}
+          <div className="card mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Invite Friends</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Copy this link to invite friends. They can join even if they don't have an account yet.
+            </p>
+            {inviteUrl ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={inviteUrl}
+                  className="input flex-1 text-sm bg-gray-50"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button
+                  onClick={handleCopyInvite}
+                  className="btn btn-primary whitespace-nowrap"
+                >
+                  {inviteCopied ? 'Copied!' : 'Copy Link'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => createInviteMutation.mutate()}
+                disabled={createInviteMutation.isPending}
+                className="btn btn-primary"
+              >
+                {createInviteMutation.isPending ? 'Generating...' : 'Generate Invite Link'}
+              </button>
+            )}
+          </div>
+
           {/* Leaderboard */}
           <div className="card">
             <h2 className="text-2xl font-bold mb-4">Leaderboard</h2>

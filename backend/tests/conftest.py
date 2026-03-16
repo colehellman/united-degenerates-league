@@ -18,6 +18,7 @@ from app.core.deps import get_db
 from fastapi.security import HTTPAuthorizationCredentials
 from app.main import app
 from app.models.game import Game, GameStatus
+from app.models.invite_link import InviteLink
 
 
 @pytest.fixture(scope="session")
@@ -42,8 +43,8 @@ async def db_session():
     async with engine.begin() as conn:
         await conn.execute(text(
             "TRUNCATE TABLE picks, fixed_team_selections, join_requests, "
-            "participants, games, competitions, golfers, teams, leagues, "
-            "audit_logs, bug_reports, users CASCADE"
+            "invite_links, participants, games, competitions, golfers, teams, "
+            "leagues, audit_logs, bug_reports, users CASCADE"
         ))
 
     async with async_session() as session:
@@ -249,3 +250,62 @@ async def _make_global_admin(db_session: AsyncSession, user: User) -> User:
     await db_session.commit()
     await db_session.refresh(user)
     return user
+
+
+@pytest.fixture
+async def invite_link(db_session: AsyncSession, active_competition: Competition, test_user: User, participant: Participant):
+    """Invite link created by test_user (who is admin of active_competition).
+    is_admin_invite=True because test_user is in league_admin_ids.
+    """
+    link = InviteLink(
+        competition_id=active_competition.id,
+        created_by_user_id=test_user.id,
+        is_admin_invite=True,
+    )
+    db_session.add(link)
+    await db_session.commit()
+    await db_session.refresh(link)
+    return link
+
+
+@pytest.fixture
+async def participant_invite_link(db_session: AsyncSession, active_competition: Competition, second_user: User):
+    """Invite link created by second_user (regular participant, not admin).
+    is_admin_invite=False.
+    Requires second_user to be a participant first.
+    """
+    p = Participant(user_id=second_user.id, competition_id=active_competition.id)
+    db_session.add(p)
+    await db_session.commit()
+
+    link = InviteLink(
+        competition_id=active_competition.id,
+        created_by_user_id=second_user.id,
+        is_admin_invite=False,
+    )
+    db_session.add(link)
+    await db_session.commit()
+    await db_session.refresh(link)
+    return link
+
+
+@pytest.fixture
+async def completed_competition(db_session: AsyncSession, test_league: League, test_user: User):
+    """Completed competition for testing expired invite links."""
+    comp = Competition(
+        name="Completed Comp",
+        mode=CompetitionMode.DAILY_PICKS,
+        status=CompetitionStatus.COMPLETED,
+        league_id=test_league.id,
+        start_date=datetime.utcnow() - timedelta(days=30),
+        end_date=datetime.utcnow() - timedelta(days=1),
+        display_timezone="UTC",
+        visibility=Visibility.PUBLIC,
+        join_type=JoinType.OPEN,
+        creator_id=test_user.id,
+        league_admin_ids=[test_user.id],
+    )
+    db_session.add(comp)
+    await db_session.commit()
+    await db_session.refresh(comp)
+    return comp

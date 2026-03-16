@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, update as sa_update
 from typing import List, Optional
 from datetime import datetime, timedelta
 
@@ -20,6 +20,8 @@ from app.schemas.competition import (
     CompetitionListResponse,
 )
 from app.schemas.participant import JoinRequestCreate, JoinRequestResponse
+from app.models.invite_link import InviteLink
+from app.schemas.invite_link import InviteLinkResponse, JoinCompetitionRequest
 
 router = APIRouter()
 
@@ -372,10 +374,11 @@ async def delete_competition(
 @router.post("/{competition_id}/join")
 async def join_competition(
     competition_id: str,
+    body: Optional[JoinCompetitionRequest] = Body(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Join a competition or request to join"""
+    """Join a competition or request to join. Optionally pass an invite_token."""
     result = await db.execute(
         select(Competition).where(Competition.id == competition_id)
     )
@@ -385,6 +388,13 @@ async def join_competition(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Competition not found",
+        )
+
+    # Reject joins to completed competitions
+    if competition.status == CompetitionStatus.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot join a completed competition",
         )
 
     # Check if already a participant
@@ -415,28 +425,186 @@ async def join_competition(
                 detail="Competition is full",
             )
 
-    # If open join, add participant directly
-    if competition.join_type == "open":
+    # Validate invite token if provided
+    invite_link = None
+    invite_token = body.invite_token if body else None
+    if invite_token:
+        link_result = await db.execute(
+            select(InviteLink).where(InviteLink.token == invite_token)
+        )
+        invite_link = link_result.scalar_one_or_none()
+
+        if not invite_link:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid invite token",
+            )
+        if invite_link.competition_id != competition.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invite token is for a different competition",
+            )
+
+    # Determine join behavior
+    should_join_directly = (
+        competition.join_type == "open"
+        or (invite_link and invite_link.is_admin_invite)
+    )
+
+    if should_join_directly:
         participant = Participant(
             user_id=current_user.id,
             competition_id=competition.id,
         )
         db.add(participant)
-        await db.commit()
 
+        # Atomic use_count increment within the same transaction
+        if invite_link:
+            await db.execute(
+                sa_update(InviteLink)
+                .where(InviteLink.id == invite_link.id)
+                .values(use_count=InviteLink.use_count + 1)
+            )
+
+        await db.commit()
         return {"message": "Joined competition successfully"}
 
-    # Otherwise, create join request
+    # Otherwise, create join request (requires_approval path)
+    # Check for existing pending join request
+    existing_request = await db.execute(
+        select(JoinRequest).where(
+            and_(
+                JoinRequest.competition_id == competition.id,
+                JoinRequest.user_id == current_user.id,
+                JoinRequest.status == JoinRequestStatus.PENDING,
+            )
+        )
+    )
+    if existing_request.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You already have a pending join request for this competition",
+        )
+
     join_request = JoinRequest(
         user_id=current_user.id,
         competition_id=competition.id,
         status=JoinRequestStatus.PENDING,
     )
     db.add(join_request)
+
+    # Atomic use_count increment within the same transaction
+    if invite_link:
+        await db.execute(
+            sa_update(InviteLink)
+            .where(InviteLink.id == invite_link.id)
+            .values(use_count=InviteLink.use_count + 1)
+        )
+
     await db.commit()
     await db.refresh(join_request)
 
     return JoinRequestResponse.model_validate(join_request)
+
+
+@router.post("/{competition_id}/invite-links", response_model=InviteLinkResponse, status_code=status.HTTP_201_CREATED)
+async def create_invite_link(
+    competition_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a shareable invite link for a competition."""
+    result = await db.execute(
+        select(Competition).where(Competition.id == competition_id)
+    )
+    competition = result.scalar_one_or_none()
+    if not competition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Competition not found",
+        )
+
+    # Must be a participant
+    participant_result = await db.execute(
+        select(Participant).where(
+            and_(
+                Participant.competition_id == competition.id,
+                Participant.user_id == current_user.id,
+            )
+        )
+    )
+    if not participant_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Must be a participant to create an invite link",
+        )
+
+    # Determine admin status
+    is_admin = (
+        current_user.id in (competition.league_admin_ids or [])
+        or current_user.role == UserRole.GLOBAL_ADMIN
+    )
+
+    invite_link = InviteLink(
+        competition_id=competition.id,
+        created_by_user_id=current_user.id,
+        is_admin_invite=is_admin,
+    )
+    db.add(invite_link)
+    await db.commit()
+    await db.refresh(invite_link)
+
+    return InviteLinkResponse.model_validate(invite_link)
+
+
+@router.get("/{competition_id}/invite-links", response_model=list[InviteLinkResponse])
+async def list_invite_links(
+    competition_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List invite links for a competition. Participants see own, admins see all."""
+    result = await db.execute(
+        select(Competition).where(Competition.id == competition_id)
+    )
+    competition = result.scalar_one_or_none()
+    if not competition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Competition not found",
+        )
+
+    participant_result = await db.execute(
+        select(Participant).where(
+            and_(
+                Participant.competition_id == competition.id,
+                Participant.user_id == current_user.id,
+            )
+        )
+    )
+    if not participant_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Must be a participant to view invite links",
+        )
+
+    is_admin = (
+        current_user.id in (competition.league_admin_ids or [])
+        or current_user.role == UserRole.GLOBAL_ADMIN
+    )
+
+    query = select(InviteLink).where(
+        InviteLink.competition_id == competition.id
+    )
+    if not is_admin:
+        query = query.where(InviteLink.created_by_user_id == current_user.id)
+
+    query = query.order_by(InviteLink.created_at.desc())
+
+    links_result = await db.execute(query)
+    links = links_result.scalars().all()
+
+    return [InviteLinkResponse.model_validate(link) for link in links]
 
 
 @router.get("/{competition_id}/games")

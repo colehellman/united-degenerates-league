@@ -15,12 +15,12 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate }
 })
 
-function renderLogin() {
+function renderLogin(initialPath = '/login') {
   vi.mocked(useAuthStore).mockReturnValue({
     login: mockLogin,
   } as any)
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Login />
     </MemoryRouter>,
   )
@@ -69,6 +69,21 @@ describe('Login — successful submission', () => {
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
 
     expect(screen.getByRole('button', { name: /signing in/i })).toBeDisabled()
+  })
+})
+
+describe('Login — redirect after login', () => {
+  it('navigates to redirect param after successful login', async () => {
+    mockLogin.mockResolvedValueOnce(undefined)
+    renderLogin('/login?redirect=/invite/abc123')
+
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'alice@example.com' } })
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'hunter2' } })
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/invite/abc123')
+    })
   })
 })
 

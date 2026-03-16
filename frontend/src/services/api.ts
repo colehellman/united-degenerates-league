@@ -227,4 +227,24 @@ api.interceptors.response.use(
   },
 )
 
+export async function resolveInviteToken(token: string) {
+  const resp = await api.get(`/invite/${token}`, { _skipToast: true })
+  return resp.data
+}
+
+export async function joinViaInvite(competitionId: string, inviteToken: string) {
+  const resp = await api.post(`/competitions/${competitionId}/join`, { invite_token: inviteToken })
+  return resp.data
+}
+
+export async function createInviteLink(competitionId: string) {
+  const resp = await api.post(`/competitions/${competitionId}/invite-links`)
+  return resp.data
+}
+
+export async function listInviteLinks(competitionId: string) {
+  const resp = await api.get(`/competitions/${competitionId}/invite-links`)
+  return resp.data
+}
+
 export default api
