@@ -31,8 +31,8 @@ New `InviteLink` table:
 
 - **Auth:** Required. Must be a participant.
 - **Logic:** Creates an InviteLink. Sets `is_admin_invite = True` if the user is in `competition.league_admin_ids` or `current_user.role == UserRole.GLOBAL_ADMIN`.
-- **Response:** `{ id, token, is_admin_invite, use_count, created_at, invite_url }`
-- **`invite_url` construction:** The frontend constructs the full URL from the token (e.g., `${window.location.origin}/invite/${token}`). The backend response only includes `token`; the frontend builds the shareable URL.
+- **Response:** `{ id, token, is_admin_invite, use_count, created_at }`
+- The frontend constructs the shareable URL from the token (e.g., `${window.location.origin}/invite/${token}`). The backend does not return a full URL.
 
 ### List invite links
 
@@ -48,21 +48,21 @@ New `InviteLink` table:
 
 - **Auth:** Optional (unauthenticated access allowed).
 - **Router:** Registered as a separate router in `main.py` with prefix `/api/invite` (not under the `/api/competitions` prefix).
-- **Logic:** Looks up the token, joins Competition and League tables, checks competition is not COMPLETED, returns limited competition info.
-- **Response:** `{ competition_id, competition_name, description, league_display_name (from League.display_name), mode, status, participant_count, max_participants, is_admin_invite }`
-- **Errors:** 404 if token not found. 410 if competition is completed.
+- **Logic:** Looks up the token, joins Competition → League (via `competition.league_id`) to get `League.display_name`, checks competition is not COMPLETED, returns limited competition info.
+- **Response:** `{ competition_id, competition_name, description, league_display_name, mode, status, participant_count, max_participants, is_admin_invite }`
+- **Errors:** 404 if token not found. 410 if competition is completed. (No `CANCELLED` status exists in `CompetitionStatus` — only UPCOMING, ACTIVE, COMPLETED.)
 
 ### Join via invite (modification to existing endpoint)
 
 `POST /api/competitions/{competition_id}/join`
 
-- **Change:** Accept optional request body with `invite_token` field. New schema: `JoinCompetitionRequest(BaseModel)` with `invite_token: Optional[str] = None`. The endpoint parameter uses `Body(default=None)` so callers can omit the body entirely for backward compatibility.
+- **Change:** Accept optional request body with `invite_token` field. New schema in `invite_link.py`: `JoinCompetitionRequest(BaseModel)` with `invite_token: Optional[str] = None`. The endpoint parameter uses `Body(default=None)` so callers can omit the body entirely for backward compatibility.
 - **Add status guard:** Reject joins when competition status is `COMPLETED` (currently missing from the endpoint).
 - **Logic:**
   - If `invite_token` is provided, validate it belongs to this competition and competition is not completed.
   - If `is_admin_invite` is true AND competition `join_type` is `requires_approval`, bypass approval and create Participant directly.
   - If `is_admin_invite` is false, follow normal flow (immediate for open, join request for requires_approval).
-  - Increment `use_count` atomically (`UPDATE invite_links SET use_count = use_count + 1`) on any usage (join or join request).
+  - Increment `use_count` atomically (`UPDATE invite_links SET use_count = use_count + 1`) **within the same database transaction** as the join/join-request creation. If the join fails (e.g., max_participants reached, already a participant), the transaction rolls back and `use_count` is not incremented.
   - Check for existing pending JoinRequest before creating a duplicate — return appropriate message if one already exists.
 - **Existing behavior unchanged** when no invite_token is provided.
 
@@ -98,14 +98,20 @@ The `/register` and `/login` pages need to support a `redirect` query parameter.
 - **Invalid token:** 404 from resolve endpoint. Frontend shows error message.
 - **Completed competition:** 410 from resolve endpoint. Frontend shows "competition has ended."
 - **UPCOMING competition:** Invite links work — users can join before a competition starts.
+- **Joining ACTIVE competition after picks lock:** A user who joins mid-competition via invite link becomes a participant with zero picks/points for past days. This is acceptable — they can start picking from the current day forward. No special handling needed; the leaderboard naturally reflects their late start.
 - **Already a participant:** Existing join endpoint logic handles this. Frontend shows message + link to competition.
 - **Max participants reached:** Existing join endpoint logic handles this. Invite link doesn't override capacity.
 - **Duplicate join request:** Before creating a JoinRequest, check for existing pending request for same user+competition. Return "You already have a pending join request" instead of creating a duplicate.
-- **Multiple links per user:** Allowed. UI shows most recent by default.
+- **Multiple links per user:** Allowed. UI shows most recent by default (sorted by `created_at DESC`). List endpoint also returns results in this order.
 - **Private competitions:** Resolve endpoint returns limited info only (name, description, participant count). No game/leaderboard data exposed.
 - **Competition deleted:** Cascade delete removes all invite links.
 - **Race condition on use_count:** Use atomic SQL increment (`use_count = InviteLink.use_count + 1`) to avoid lost updates.
 - **Token collision:** Unique constraint on `token` column handles this. Retry with new token on IntegrityError (extremely unlikely with 72 bits of entropy).
+
+## Rate Limiting
+
+- `POST /api/competitions/{id}/invite-links` — relies on existing app-level rate limiting (authenticated endpoint). If no global rate limiter exists, consider adding one in a future pass.
+- `GET /api/invite/{token}` — unauthenticated, but tokens have 72 bits of entropy (~4.7 sextillion possibilities for 12-char tokens), making brute-force enumeration infeasible. Standard rate limiting on the API gateway (if present) is sufficient. No special per-endpoint limiting needed for v1.
 
 ## Out of Scope
 
@@ -119,7 +125,7 @@ Single Alembic migration adding the `invite_links` table.
 
 ### New files
 - `backend/app/models/invite_link.py` — InviteLink model
-- `backend/app/schemas/invite_link.py` — Pydantic schemas (InviteLinkResponse, InviteResolveResponse)
+- `backend/app/schemas/invite_link.py` — Pydantic schemas (InviteLinkResponse, InviteResolveResponse, JoinCompetitionRequest)
 - `backend/app/api/invite.py` — Invite resolve router (separate from competitions router)
 - `backend/alembic/versions/xxx_add_invite_links.py` — Migration
 - `frontend/src/pages/InviteLanding.tsx` — Invite landing page
@@ -128,7 +134,7 @@ Single Alembic migration adding the `invite_links` table.
 - `backend/app/models/__init__.py` — Export InviteLink
 - `backend/app/main.py` — Register invite router
 - `backend/app/api/competitions.py` — Add invite link CRUD endpoints, modify join endpoint
-- `backend/app/schemas/participant.py` — Add `JoinCompetitionRequest` schema with optional `invite_token`
+- `backend/app/schemas/invite_link.py` also contains `JoinCompetitionRequest` schema (with optional `invite_token`), keeping all invite-related schemas together
 - `frontend/src/pages/CompetitionDetail.tsx` — Add invite sharing section
 - `frontend/src/services/api.ts` — Add invite link API calls
 - `frontend/src/App.tsx` — Add `/invite/:token` route outside auth guards, update auth redirect logic
