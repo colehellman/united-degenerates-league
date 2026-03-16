@@ -491,6 +491,56 @@ async def create_invite_link(
     return InviteLinkResponse.model_validate(invite_link)
 
 
+@router.get("/{competition_id}/invite-links", response_model=list[InviteLinkResponse])
+async def list_invite_links(
+    competition_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List invite links for a competition. Participants see own, admins see all."""
+    result = await db.execute(
+        select(Competition).where(Competition.id == competition_id)
+    )
+    competition = result.scalar_one_or_none()
+    if not competition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Competition not found",
+        )
+
+    participant_result = await db.execute(
+        select(Participant).where(
+            and_(
+                Participant.competition_id == competition.id,
+                Participant.user_id == current_user.id,
+            )
+        )
+    )
+    if not participant_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Must be a participant to view invite links",
+        )
+
+    is_admin = (
+        current_user.id in (competition.league_admin_ids or [])
+        or current_user.role == UserRole.GLOBAL_ADMIN
+    )
+
+    query = select(InviteLink).where(
+        InviteLink.competition_id == competition.id
+    )
+    if not is_admin:
+        query = query.where(InviteLink.created_by_user_id == current_user.id)
+
+    query = query.order_by(InviteLink.created_at.desc())
+
+    links_result = await db.execute(query)
+    links = links_result.scalars().all()
+
+    return [InviteLinkResponse.model_validate(link) for link in links]
+
+
 @router.get("/{competition_id}/games")
 async def get_competition_games(
     competition_id: str,
