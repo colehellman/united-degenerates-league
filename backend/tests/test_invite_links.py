@@ -69,3 +69,64 @@ async def test_cascade_delete_removes_invite_links(
     await db_session.commit()
     result = await db_session.execute(select(InviteLink))
     assert result.scalars().all() == []
+
+
+# ── GET /api/invite/{token} — Resolve Endpoint ──────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_resolve_valid_token_returns_competition_info(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    invite_link: InviteLink,
+    active_competition: Competition,
+    test_league,
+):
+    """Resolving a valid token should return competition info (no auth required)."""
+    resp = await client.get(f"/api/invite/{invite_link.token}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["competition_id"] == str(active_competition.id)
+    assert data["competition_name"] == active_competition.name
+    assert data["league_display_name"] == test_league.display_name
+    assert data["is_admin_invite"] == invite_link.is_admin_invite
+    assert "participant_count" in data
+    # Verify no game/leaderboard data exposed
+    assert "picks" not in data
+    assert "scores" not in data
+    assert "games" not in data
+
+
+@pytest.mark.asyncio
+async def test_resolve_invalid_token_returns_404(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """Unknown token should return 404."""
+    resp = await client.get("/api/invite/doesnotexist")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_completed_competition_returns_410(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    completed_competition: Competition,
+    test_user: User,
+):
+    """Token for a completed competition should return 410."""
+    p = Participant(user_id=test_user.id, competition_id=completed_competition.id)
+    db_session.add(p)
+    await db_session.commit()
+
+    link = InviteLink(
+        competition_id=completed_competition.id,
+        created_by_user_id=test_user.id,
+        is_admin_invite=True,
+    )
+    db_session.add(link)
+    await db_session.commit()
+    await db_session.refresh(link)
+
+    resp = await client.get(f"/api/invite/{link.token}")
+    assert resp.status_code == 410
