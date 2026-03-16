@@ -4,6 +4,22 @@ import toast from 'react-hot-toast'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
+// Warn when the built-in API URL points to localhost but the site is served
+// from a remote host — this almost always means VITE_API_URL was not set at
+// build time.  The warning only fires once and only in the browser console.
+if (
+  API_URL.includes('localhost') &&
+  typeof window !== 'undefined' &&
+  !window.location.hostname.includes('localhost') &&
+  !window.location.hostname.includes('127.0.0.1')
+) {
+  console.error(
+    '[UDL] VITE_API_URL was not set at build time — API calls will fail.\n' +
+    `Current API target: ${API_URL}\n` +
+    'Set VITE_API_URL in your Render environment variables and redeploy the frontend.'
+  )
+}
+
 export const api = axios.create({
   baseURL: `${API_URL}/api`,
   headers: {
@@ -105,7 +121,15 @@ api.interceptors.response.use(
     // Callers that render inline error messages pass _skipToast: true to avoid
     // surfacing the same error twice.
     if (error.response?.status !== 401 && !originalRequest._skipToast) {
-      toast.error(error.response?.data?.detail || 'An unexpected error occurred')
+      let message = error.response?.data?.detail || 'An unexpected error occurred'
+
+      // Network errors (no response at all) usually mean the API URL is wrong
+      // or the backend is down.  Give a more actionable message.
+      if (!error.response && (error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED')) {
+        message = 'Cannot reach the server. It may be starting up — please try again in a moment.'
+      }
+
+      toast.error(message)
     }
 
     // Skip the auto-refresh cycle for auth endpoints that don't need a session:

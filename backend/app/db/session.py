@@ -2,9 +2,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy.orm import declarative_base
 from app.core.config import settings
 
-# Convert postgresql:// to postgresql+asyncpg:// and strip sslmode param
-# (asyncpg doesn't accept sslmode — we handle SSL via connect_args instead)
-database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+# Convert postgres:// or postgresql:// to postgresql+asyncpg:// and strip
+# sslmode param (asyncpg doesn't accept sslmode — we handle SSL via
+# connect_args instead).  Many cloud providers (Neon, Heroku) use the
+# short-form postgres:// which SQLAlchemy async does not support directly.
+database_url = settings.DATABASE_URL
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 if "sslmode=" in database_url:
     from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
     parsed = urlparse(database_url)
