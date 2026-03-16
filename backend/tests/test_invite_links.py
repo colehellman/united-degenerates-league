@@ -130,3 +130,84 @@ async def test_resolve_completed_competition_returns_410(
 
     resp = await client.get(f"/api/invite/{link.token}")
     assert resp.status_code == 410
+
+
+# ── POST /api/competitions/{id}/invite-links — Create Endpoint ───────────
+
+
+@pytest.mark.asyncio
+async def test_regular_participant_creates_non_admin_invite(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    active_competition: Competition,
+    second_user: User,
+):
+    """A regular participant (not in league_admin_ids) creates is_admin_invite=False."""
+    p = Participant(user_id=second_user.id, competition_id=active_competition.id)
+    db_session.add(p)
+    await db_session.commit()
+
+    token = await _login(client, email="second@example.com")
+    resp = await client.post(
+        f"/api/competitions/{active_competition.id}/invite-links",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["is_admin_invite"] is False
+    assert len(resp.json()["token"]) == 12
+
+
+@pytest.mark.asyncio
+async def test_league_admin_creates_admin_invite(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    active_competition: Competition,
+    test_user: User,
+    participant: Participant,
+):
+    """A user in league_admin_ids creates is_admin_invite=True."""
+    token = await _login(client)
+    resp = await client.post(
+        f"/api/competitions/{active_competition.id}/invite-links",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["is_admin_invite"] is True
+
+
+@pytest.mark.asyncio
+async def test_global_admin_creates_admin_invite(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    active_competition: Competition,
+    second_user: User,
+):
+    """A global admin (not in league_admin_ids) creates is_admin_invite=True."""
+    p = Participant(user_id=second_user.id, competition_id=active_competition.id)
+    db_session.add(p)
+    await db_session.commit()
+    await _make_global_admin(db_session, second_user)
+
+    token = await _login(client, email="second@example.com")
+    resp = await client.post(
+        f"/api/competitions/{active_competition.id}/invite-links",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["is_admin_invite"] is True
+
+
+@pytest.mark.asyncio
+async def test_non_participant_cannot_create_invite(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    active_competition: Competition,
+    second_user: User,
+):
+    """A user who is not a participant cannot create an invite link."""
+    token = await _login(client, email="second@example.com")
+    resp = await client.post(
+        f"/api/competitions/{active_competition.id}/invite-links",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 403
