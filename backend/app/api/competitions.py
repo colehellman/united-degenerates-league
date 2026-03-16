@@ -20,6 +20,8 @@ from app.schemas.competition import (
     CompetitionListResponse,
 )
 from app.schemas.participant import JoinRequestCreate, JoinRequestResponse
+from app.models.invite_link import InviteLink
+from app.schemas.invite_link import InviteLinkResponse
 
 router = APIRouter()
 
@@ -437,6 +439,56 @@ async def join_competition(
     await db.refresh(join_request)
 
     return JoinRequestResponse.model_validate(join_request)
+
+
+@router.post("/{competition_id}/invite-links", response_model=InviteLinkResponse, status_code=status.HTTP_201_CREATED)
+async def create_invite_link(
+    competition_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a shareable invite link for a competition."""
+    result = await db.execute(
+        select(Competition).where(Competition.id == competition_id)
+    )
+    competition = result.scalar_one_or_none()
+    if not competition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Competition not found",
+        )
+
+    # Must be a participant
+    participant_result = await db.execute(
+        select(Participant).where(
+            and_(
+                Participant.competition_id == competition.id,
+                Participant.user_id == current_user.id,
+            )
+        )
+    )
+    if not participant_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Must be a participant to create an invite link",
+        )
+
+    # Determine admin status
+    is_admin = (
+        current_user.id in (competition.league_admin_ids or [])
+        or current_user.role == UserRole.GLOBAL_ADMIN
+    )
+
+    invite_link = InviteLink(
+        competition_id=competition.id,
+        created_by_user_id=current_user.id,
+        is_admin_invite=is_admin,
+    )
+    db.add(invite_link)
+    await db.commit()
+    await db.refresh(invite_link)
+
+    return InviteLinkResponse.model_validate(invite_link)
 
 
 @router.get("/{competition_id}/games")
