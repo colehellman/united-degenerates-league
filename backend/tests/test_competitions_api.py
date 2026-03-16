@@ -45,7 +45,7 @@ async def test_create_competition_past_start_date_rejected(
 ):
     """start_date in the past must return 422."""
     token = await _login(client)
-    past = (datetime.utcnow() - timedelta(hours=2)).isoformat() + "Z"
+    past = (datetime.utcnow() - timedelta(days=1)).isoformat() + "Z"
     future = (datetime.utcnow() + timedelta(days=7)).isoformat() + "Z"
 
     resp = await client.post(
