@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../services/authStore'
 
 export default function Register() {
@@ -12,6 +12,11 @@ export default function Register() {
 
   const { register } = useAuthStore()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const redirectTo = (() => {
+    const r = searchParams.get('redirect')
+    return r && r.startsWith('/') && !r.startsWith('//') ? r : '/'
+  })()
 
   const passwordChecks = useMemo(() => ({
     length: password.length >= 8,
@@ -40,7 +45,7 @@ export default function Register() {
 
     try {
       await register(email, username, password)
-      navigate('/')
+      navigate(redirectTo)
     } catch (err: any) {
       if (!err.response && (err.code === 'ERR_NETWORK' || err.code === 'ECONNABORTED')) {
         setError('Cannot reach the server. It may be starting up — please try again in a moment.')

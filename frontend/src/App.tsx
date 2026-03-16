@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from './services/authStore'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
@@ -8,6 +8,7 @@ import Competitions from './pages/Competitions'
 import CompetitionDetail from './pages/CompetitionDetail'
 import CreateCompetition from './pages/CreateCompetition'
 import Admin from './pages/Admin'
+import InviteLanding from './pages/InviteLanding'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -24,6 +25,11 @@ function NotFound() {
 function App() {
   const { isAuthenticated, isInitializing, checkAuth } = useAuthStore()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const redirectParam = (() => {
+    const r = searchParams.get('redirect')
+    return r && r.startsWith('/') && !r.startsWith('//') ? r : null
+  })()
 
   useEffect(() => {
     // Validate the httpOnly cookie on every app load. Without this, refreshing
@@ -57,8 +63,10 @@ function App() {
   return (
     <ErrorBoundary resetKey={location.pathname}>
       <Routes>
-        <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <Login />} />
-        <Route path="/register" element={isAuthenticated ? <Navigate to="/" /> : <Register />} />
+        <Route path="/login" element={isAuthenticated ? <Navigate to={redirectParam || "/"} /> : <Login />} />
+        <Route path="/register" element={isAuthenticated ? <Navigate to={redirectParam || "/"} /> : <Register />} />
+
+        <Route path="/invite/:token" element={<InviteLanding />} />
 
         <Route element={<Layout />}>
           <Route path="/" element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />} />
