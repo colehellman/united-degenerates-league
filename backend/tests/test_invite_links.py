@@ -648,3 +648,43 @@ async def test_invite_token_from_different_competition_rejected(
         json={"invite_token": invite_link.token},
     )
     assert resp.status_code == 400
+
+
+# ── Concurrency ──────────────────────────────────────────────────────────
+
+import asyncio as _asyncio
+from sqlalchemy import update as sa_update
+from app.db.session import async_session as session_factory
+
+
+@pytest.mark.asyncio
+async def test_use_count_increments_atomically_under_concurrency(
+    db_session: AsyncSession,
+    active_competition: Competition,
+    test_user: User,
+    participant: Participant,
+):
+    """Concurrent increments should not lose updates."""
+    link = InviteLink(
+        competition_id=active_competition.id,
+        created_by_user_id=test_user.id,
+        is_admin_invite=True,
+    )
+    db_session.add(link)
+    await db_session.commit()
+    await db_session.refresh(link)
+    link_id = link.id
+
+    async def increment():
+        async with session_factory() as session:
+            await session.execute(
+                sa_update(InviteLink)
+                .where(InviteLink.id == link_id)
+                .values(use_count=InviteLink.use_count + 1)
+            )
+            await session.commit()
+
+    await _asyncio.gather(*[increment() for _ in range(10)])
+
+    await db_session.refresh(link)
+    assert link.use_count == 10
