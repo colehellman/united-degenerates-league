@@ -12,9 +12,19 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str = "dev-secret-key-change-in-production"
+    # Separate signing key for refresh tokens. Falls back to SECRET_KEY if unset.
+    # In production, set a distinct value so compromising one key doesn't
+    # compromise the other token type.
+    REFRESH_SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # Auth rate limiting (stricter than global limit)
+    AUTH_RATE_LIMIT: str = "5/minute"
+    # Account lockout after repeated failures
+    AUTH_LOCKOUT_ATTEMPTS: int = 10
+    AUTH_LOCKOUT_MINUTES: int = 15
 
     # Environment
     ENVIRONMENT: str = "development"

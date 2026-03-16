@@ -64,11 +64,11 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
 
-    # Block hard-deleted accounts only. PENDING_DELETION users retain access
-    # with their existing token so they can cancel within the 30-day grace
-    # period. Login (auth.py) separately blocks PENDING_DELETION from obtaining
-    # new tokens, so the window is bounded by token TTL (30 minutes).
-    if user.status == AccountStatus.DELETED:
+    # Block deleted, suspended, and banned accounts. PENDING_DELETION users
+    # retain access with their existing token so they can cancel within the
+    # 30-day grace period. Login (auth.py) separately blocks PENDING_DELETION
+    # from obtaining new tokens, so the window is bounded by token TTL.
+    if user.status in (AccountStatus.DELETED, AccountStatus.SUSPENDED, AccountStatus.BANNED):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is not active",

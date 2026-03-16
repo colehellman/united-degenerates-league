@@ -28,9 +28,17 @@ class AuditAction(str, enum.Enum):
     # Winner designation
     WINNER_DESIGNATED = "winner_designated"
 
+    # Participant actions
+    PARTICIPANT_REMOVED = "participant_removed"
+
     # Join requests
     JOIN_REQUEST_APPROVED = "join_request_approved"
     JOIN_REQUEST_REJECTED = "join_request_rejected"
+
+    # User account actions
+    USER_SUSPENDED = "user_suspended"
+    USER_BANNED = "user_banned"
+    USER_REACTIVATED = "user_reactivated"
 
 
 class AuditLog(Base):

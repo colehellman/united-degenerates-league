@@ -49,12 +49,17 @@ async def get_my_bug_reports(
 
 @router.get("", response_model=List[BugReportResponse])
 async def list_bug_reports(
+    limit: int = 100,
+    offset: int = 0,
     current_user: User = Depends(get_current_global_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return all bug reports. Global admins only."""
+    """Return all bug reports (paginated). Global admins only."""
     result = await db.execute(
-        select(BugReport).order_by(BugReport.created_at.desc())
+        select(BugReport)
+        .order_by(BugReport.created_at.desc())
+        .limit(min(limit, 500))
+        .offset(offset)
     )
     reports = result.scalars().all()
     return [BugReportResponse.model_validate(r) for r in reports]

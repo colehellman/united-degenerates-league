@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Railway start script for backend API
+# Render start script for backend API
 
 echo "Starting United Degenerates League Backend..."
 

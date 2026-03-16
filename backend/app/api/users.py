@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from datetime import datetime, timedelta
 
 from app.core.deps import get_db, get_current_user
 from app.models.user import User, AccountStatus
 from app.schemas.user import UserResponse, UserUpdate, PasswordChange
 from app.core.security import verify_password, get_password_hash
+from app.services.token_blacklist import blacklist_all_user_tokens
 
 router = APIRouter()
 
@@ -26,13 +29,29 @@ async def update_current_user(
 ):
     """Update current user profile"""
     if update_data.username is not None:
+        # Check uniqueness before updating
+        result = await db.execute(
+            select(User).where(User.username == update_data.username, User.id != current_user.id)
+        )
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already taken",
+            )
         current_user.username = update_data.username
 
     if update_data.has_dismissed_onboarding is not None:
         current_user.has_dismissed_onboarding = update_data.has_dismissed_onboarding
 
     current_user.updated_at = datetime.utcnow()
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already taken",
+        )
     await db.refresh(current_user)
 
     return UserResponse.model_validate(current_user)
@@ -57,6 +76,9 @@ async def change_password(
     current_user.updated_at = datetime.utcnow()
     await db.commit()
 
+    # Revoke all existing refresh tokens so stolen tokens can't be reused
+    blacklist_all_user_tokens(str(current_user.id))
+
     return {"message": "Password updated successfully"}
 
 
@@ -70,6 +92,9 @@ async def request_account_deletion(
     current_user.deletion_requested_at = datetime.utcnow()
     current_user.updated_at = datetime.utcnow()
     await db.commit()
+
+    # Revoke all existing refresh tokens
+    blacklist_all_user_tokens(str(current_user.id))
 
     deletion_date = current_user.deletion_requested_at + timedelta(days=30)
 

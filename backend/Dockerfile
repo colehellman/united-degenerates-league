@@ -12,8 +12,14 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Create non-root user for running the application
+RUN adduser --disabled-password --gecos "" --uid 1001 appuser
+
 # Copy application code
 COPY . .
+
+# Switch to non-root user
+USER appuser
 
 # Expose port
 EXPOSE 8000

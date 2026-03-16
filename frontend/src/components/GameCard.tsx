@@ -54,10 +54,10 @@ const GameCard: React.FC<GameCardProps> = React.memo(function GameCard({ game, u
               onPickChange(game.id, game.away_team.id)
             }
           }}
-          className={`border rounded-lg p-3 transition select-none ${teamCardClass(game.away_team.id)}`}
+          className={`border rounded-lg p-3 transition select-none min-w-0 ${teamCardClass(game.away_team.id)}`}
         >
-          <div className="font-semibold text-sm">{game.away_team.city}</div>
-          <div className="font-bold">{game.away_team.name}</div>
+          <div className="font-semibold text-sm truncate">{game.away_team.city}</div>
+          <div className="font-bold truncate">{game.away_team.name}</div>
           {game.away_team.record && (
             <div className="text-xs text-gray-500 mt-0.5">{game.away_team.record}</div>
           )}
@@ -84,11 +84,11 @@ const GameCard: React.FC<GameCardProps> = React.memo(function GameCard({ game, u
               onPickChange(game.id, game.home_team.id)
             }
           }}
-          className={`border rounded-lg p-3 transition select-none ${teamCardClass(game.home_team.id)}`}
+          className={`border rounded-lg p-3 transition select-none min-w-0 ${teamCardClass(game.home_team.id)}`}
         >
           <div className="text-xs text-gray-500 font-medium">HOME</div>
-          <div className="font-semibold text-sm">{game.home_team.city}</div>
-          <div className="font-bold">{game.home_team.name}</div>
+          <div className="font-semibold text-sm truncate">{game.home_team.city}</div>
+          <div className="font-bold truncate">{game.home_team.name}</div>
           {game.home_team.record && (
             <div className="text-xs text-gray-500 mt-0.5">{game.home_team.record}</div>
           )}

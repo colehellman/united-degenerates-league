@@ -36,7 +36,7 @@ async def test_user_registration(client: AsyncClient):
         json={
             "email": "newuser@example.com",
             "username": "newuser",
-            "password": "securePassword123",
+            "password": "securePassword123!",
         }
     )
     assert response.status_code == 201
