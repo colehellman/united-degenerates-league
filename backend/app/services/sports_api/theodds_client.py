@@ -47,7 +47,7 @@ class TheOddsAPIClient(BaseSportsAPIClient):
             params = {
                 "apiKey": self.api_key,
                 "regions": "us",
-                "markets": "h2h",  # Head-to-head for game results
+                "markets": "h2h,spreads,totals",
                 "dateFormat": "iso",
             }
 
@@ -133,6 +133,51 @@ class TheOddsAPIClient(BaseSportsAPIClient):
             logger.error(f"TheOddsAPI: Error fetching game {game_id}: {str(e)}")
             return None
 
+    def _extract_odds(self, event: dict) -> tuple[Optional[float], Optional[float]]:
+        """Extract spread and over/under from bookmaker data.
+
+        Prefers DraftKings, falls back to FanDuel, then first available.
+        Returns (home_spread, over_under).
+        """
+        bookmakers = event.get("bookmakers", [])
+        if not bookmakers:
+            return None, None
+
+        # Pick a bookmaker in preference order
+        preferred = ["draftkings", "fanduel"]
+        bookmaker = None
+        for pref in preferred:
+            for bm in bookmakers:
+                if bm.get("key") == pref:
+                    bookmaker = bm
+                    break
+            if bookmaker:
+                break
+        if not bookmaker:
+            bookmaker = bookmakers[0]
+
+        home_team = event.get("home_team", "")
+        spread = None
+        over_under = None
+
+        for market in bookmaker.get("markets", []):
+            market_key = market.get("key")
+            outcomes = market.get("outcomes", [])
+
+            if market_key == "spreads":
+                for outcome in outcomes:
+                    if outcome.get("name") == home_team:
+                        spread = outcome.get("point")
+                        break
+
+            elif market_key == "totals":
+                for outcome in outcomes:
+                    if outcome.get("name") == "Over":
+                        over_under = outcome.get("point")
+                        break
+
+        return spread, over_under
+
     def _parse_event(self, event: dict) -> Optional[GameData]:
         """Parse The Odds API event data (from odds endpoint)"""
         try:
@@ -146,6 +191,8 @@ class TheOddsAPIClient(BaseSportsAPIClient):
             commence_time = event.get("commence_time", "")
             scheduled_time = self._parse_datetime(commence_time) if commence_time else datetime.utcnow()
 
+            spread, over_under = self._extract_odds(event)
+
             return GameData(
                 external_id=event.get("id", ""),
                 home_team=home_team,
@@ -155,6 +202,8 @@ class TheOddsAPIClient(BaseSportsAPIClient):
                 home_score=None,
                 away_score=None,
                 venue=None,
+                spread=spread,
+                over_under=over_under,
                 raw_data=event,
             )
 

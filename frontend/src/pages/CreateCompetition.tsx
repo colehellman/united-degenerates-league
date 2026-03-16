@@ -15,11 +15,10 @@ interface League {
 export default function CreateCompetition() {
   const navigate = useNavigate()
 
-  // Format current local time as YYYY-MM-DDTHH:MM for the datetime-local min attribute.
-  // datetime-local inputs operate in browser-local time, so we must use local (not UTC) values here.
+  // Format today's date as YYYY-MM-DD for the date input min attribute.
   const pad = (n: number) => String(n).padStart(2, '0')
   const _now = new Date()
-  const startDateMin = `${_now.getFullYear()}-${pad(_now.getMonth() + 1)}-${pad(_now.getDate())}T${pad(_now.getHours())}:${pad(_now.getMinutes())}`
+  const todayStr = `${_now.getFullYear()}-${pad(_now.getMonth() + 1)}-${pad(_now.getDate())}`
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -60,12 +59,12 @@ export default function CreateCompetition() {
       return
     }
 
-    if (new Date(startDate) < new Date()) {
+    if (startDate < todayStr) {
       setError('Start date cannot be in the past')
       return
     }
 
-    if (new Date(endDate) <= new Date(startDate)) {
+    if (endDate <= startDate) {
       setError('End date must be after start date')
       return
     }
@@ -78,8 +77,8 @@ export default function CreateCompetition() {
         description: description || null,
         mode,
         league_id: leagueId,
-        start_date: startDate,
-        end_date: endDate,
+        start_date: `${startDate}T00:00:00Z`,
+        end_date: `${endDate}T23:59:59Z`,
         visibility,
         join_type: joinType,
         max_participants: maxParticipants ? parseInt(maxParticipants) : null,
@@ -195,9 +194,9 @@ export default function CreateCompetition() {
               </label>
               <input
                 id="startDate"
-                type="datetime-local"
+                type="date"
                 required
-                min={startDateMin}
+                min={todayStr}
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="input mt-1"
@@ -209,8 +208,9 @@ export default function CreateCompetition() {
               </label>
               <input
                 id="endDate"
-                type="datetime-local"
+                type="date"
                 required
+                min={todayStr}
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 className="input mt-1"

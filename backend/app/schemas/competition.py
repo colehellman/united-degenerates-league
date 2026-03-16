@@ -37,14 +37,13 @@ class CompetitionCreate(CompetitionBase):
     @field_validator("start_date", mode="after")
     @classmethod
     def start_date_not_in_past(cls, v: datetime) -> datetime:
-        """Reject start dates more than 60 seconds in the past.
+        """Reject start dates before today (UTC).
 
-        The 60-second grace window absorbs clock skew and form-submission
-        latency without letting users accidentally create competitions dated
-        hours or days ago.  strip_timezone (inherited from CompetitionBase)
-        has already normalized v to naive UTC before this runs.
+        Compares dates (not datetimes) so that selecting today always works
+        regardless of the current time.  strip_timezone (inherited from
+        CompetitionBase) has already normalized v to naive UTC before this runs.
         """
-        if v < datetime.utcnow() - timedelta(seconds=60):
+        if v.date() < datetime.utcnow().date():
             raise ValueError("Start date cannot be in the past")
         return v
 
