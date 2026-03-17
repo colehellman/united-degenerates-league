@@ -8,14 +8,20 @@ interface ThemeState {
 }
 
 function getInitialTheme(): Theme {
-  const stored = localStorage.getItem('theme')
-  if (stored === 'light' || stored === 'dark') return stored
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  try {
+    const stored = localStorage.getItem('theme')
+    if (stored === 'light' || stored === 'dark') return stored
+  } catch { /* SSR or test environment without localStorage */ }
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches
+    ? 'dark'
+    : 'light'
 }
 
 function applyTheme(theme: Theme) {
-  document.documentElement.classList.toggle('dark', theme === 'dark')
-  localStorage.setItem('theme', theme)
+  if (typeof document !== 'undefined') {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }
+  try { localStorage.setItem('theme', theme) } catch { /* noop */ }
 }
 
 const initial = getInitialTheme()
