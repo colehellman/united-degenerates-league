@@ -11,6 +11,7 @@ A comprehensive sports prediction and competition platform for friends to compet
   - **Fixed Teams**: Select teams pre-season and track their performance
 - **Live Scoring & Standings**: Real-time score updates with comprehensive leaderboards
 - **Competition Management**: Create public/private competitions with customizable rules
+- **Invite System**: Share invite links to bring friends into competitions
 - **Admin Tools**: Global and league-specific admin roles with audit logging
 - **Mobile-First Design**: Responsive UI optimized for all device sizes
 
@@ -178,82 +179,104 @@ udl/
 
 ## Database Schema
 
+<!-- AUTO:MODELS:START -->
 Key models:
-- **User**: Authentication and user management
+- **AuditLog**: Immutable audit log for admin actions
+- **BugReport**: User-submitted bug reports
 - **Competition**: Represents a competition (Daily Picks or Fixed Teams)
+- **Game**: Individual games/matches
+- **InviteLink**: A shareable invite link for a competition.
 - **League**: Sports leagues (NFL, NBA, etc.)
 - **Team**: Teams within leagues
-- **Game**: Individual games/matches
-- **Pick**: Daily picks for games
-- **FixedTeamSelection**: Pre-season team/golfer selections
 - **Golfer**: PGA golfers within a league
-- **BugReport**: User-submitted bug reports
-- **Participant**: User participation in competitions
-- **JoinRequest**: Join requests for private competitions
-- **AuditLog**: Immutable audit trail of admin actions
+- **Participant**: Represents a user's participation in a specific competition
+- **JoinRequest**: Join request for competitions with requiresApproval join type
+- **Pick**: Daily Picks - user's prediction for a specific game
+- **FixedTeamSelection**: Fixed Teams - user's pre-selected teams or golfers for the entire competition
+- **User**: Authentication and user management
+<!-- AUTO:MODELS:END -->
 
 ## API Endpoints
 
+<!-- AUTO:ENDPOINTS:START -->
 ### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login
-- `POST /api/auth/refresh` - Refresh access token
-- `POST /api/auth/logout` - Logout
+- `POST /api/auth/register` - Register a new user
+- `POST /api/auth/login` - Login with email and password
+- `POST /api/auth/refresh` - Exchange a valid refresh token for new access + refresh tokens
+- `POST /api/auth/logout` - Clear auth cookies and blacklist the refresh token server-side
 
 ### Users
 - `GET /api/users/me` - Get current user profile
-- `PATCH /api/users/me` - Update user profile
-- `POST /api/users/me/change-password` - Change password
-- `DELETE /api/users/me` - Request account deletion
-- `POST /api/users/me/cancel-deletion` - Cancel pending account deletion
+- `PATCH /api/users/me` - Update current user profile
+- `POST /api/users/me/change-password` - Change user password
+- `DELETE /api/users/me` - Request account deletion (30-day grace period)
+- `POST /api/users/me/cancel-deletion` - Cancel account deletion request
 
 ### Leagues
-- `GET /api/leagues` - List available leagues
+- `GET /api/leagues` - List all available leagues
 
 ### Competitions
-- `POST /api/competitions` - Create competition
-- `GET /api/competitions` - List competitions
-- `GET /api/competitions/{id}` - Get competition details
-- `PATCH /api/competitions/{id}` - Update competition (admins only)
-- `DELETE /api/competitions/{id}` - Delete competition (global admins only)
-- `POST /api/competitions/{id}/join` - Join competition
-- `GET /api/competitions/{id}/games` - List games for competition
-- `POST /api/competitions/{id}/sync-games` - Sync games from API
-- `GET /api/competitions/{id}/available-selections` - Get available team/golfer selections
+- `POST /api/competitions` - Create a new competition
+- `GET /api/competitions` - List all competitions accessible to the current user
+- `GET /api/competitions/{competition_id}` - Get a specific competition
+- `PATCH /api/competitions/{competition_id}` - Update a competition (admins only)
+- `DELETE /api/competitions/{competition_id}` - Delete a competition (global admins only)
+- `POST /api/competitions/{competition_id}/join` - Join a competition or request to join. Optionally pass an invite_token
+- `POST /api/competitions/{competition_id}/invite-links` - Create a shareable invite link for a competition
+- `GET /api/competitions/{competition_id}/invite-links` - List invite links for a competition. Participants see own, admins see all
+- `GET /api/competitions/{competition_id}/games` - Get games for a competition, optionally filtered by date
+- `POST /api/competitions/{competition_id}/sync-games` - Force an immediate ESPN game sync for a specific competition
+- `GET /api/competitions/{competition_id}/available-selections` - Get available teams/golfers for fixed team selection
+
+### Invites
+- `GET /api/invite/{token}` - Resolve an invite token to competition info. No auth required
 
 ### Picks
-- `POST /api/picks/{competition_id}/daily` - Submit daily picks (batch)
-- `GET /api/picks/{competition_id}/my-picks` - Get user's daily picks
-- `POST /api/picks/{competition_id}/fixed-teams` - Submit fixed team selection
-- `GET /api/picks/{competition_id}/my-fixed-selections` - Get user's fixed team selections
+- `POST /api/picks/{competition_id}/daily` - Create or update daily picks for multiple games
+- `GET /api/picks/{competition_id}/my-picks` - Get current user's daily picks for a competition
+- `POST /api/picks/{competition_id}/fixed-teams` - Create fixed team/golfer selections (batch)
+- `GET /api/picks/{competition_id}/my-fixed-selections` - Get current user's fixed team/golfer selections
 
 ### Leaderboards
-- `GET /api/leaderboards/{competition_id}` - Get competition leaderboard
+- `GET /api/leaderboards/{competition_id}` - Get leaderboard for a competition
 
 ### Admin
-- `GET /api/admin/join-requests/{competition_id}` - Get join requests (admins only)
-- `POST /api/admin/join-requests/{request_id}/approve` - Approve join request
-- `POST /api/admin/join-requests/{request_id}/reject` - Reject join request
-- `GET /api/admin/audit-logs` - Get audit logs
-- `GET /api/admin/users` - List users (global admin only)
-- `POST /api/admin/sync-games` - Trigger game sync (global admin only)
+- `PATCH /api/admin/users/{user_id}/status` - Ban, suspend, or reactivate a user account (global admin only)
+- `PATCH /api/admin/users/{user_id}/role` - Change a user's role (global admin only)
+- `GET /api/admin/users` - List all non-deleted users on the platform (paginated, global admin only)
+- `POST /api/admin/competitions/{competition_id}/status` - Force a competition status change (global admin only)
+- `POST /api/admin/games/{game_id}/correct-score` - Correct a game's score and re-score all picks (global admin only)
+- `POST /api/admin/games/{game_id}/rescore` - Manually re-score all picks for a game (global admin only)
+- `POST /api/admin/competitions/{competition_id}/winner` - Designate a competition winner (global admin only)
+- `DELETE /api/admin/competitions/{competition_id}/participants/{user_id}` - Remove a participant from a competition (competition admin or global admin)
+- `GET /api/admin/competitions/{competition_id}/participants` - List all participants in a competition with user details (competition admin or global admin)
+- `POST /api/admin/competitions/{competition_id}/admins` - Add a user as a competition admin (competition admin or global admin)
+- `DELETE /api/admin/competitions/{competition_id}/admins/{admin_user_id}` - Remove a user from competition admin list (competition admin or global admin)
+- `GET /api/admin/join-requests/{competition_id}` - Get join requests for a competition (admins only)
+- `POST /api/admin/join-requests/{request_id}/approve` - Approve a join request (admins only)
+- `POST /api/admin/join-requests/{request_id}/reject` - Reject a join request (admins only)
+- `POST /api/admin/sync-games` - Trigger an immediate game sync from ESPN (global admins only)
+- `GET /api/admin/audit-logs` - Get audit logs (admins only)
+- `GET /api/admin/stats` - Basic platform analytics (global admin only)
+- `GET /api/admin/competitions` - List all competitions with participant counts (global admin only)
 
 ### Bug Reports
-- `POST /api/bug-reports` - Submit bug report
-- `GET /api/bug-reports/mine` - Get user's bug reports
-- `GET /api/bug-reports` - List all bug reports (admin only)
-- `PATCH /api/bug-reports/{report_id}` - Update bug report status (admin only)
+- `POST /api/bug-reports` - Submit a bug report. Any authenticated user can file a report
+- `GET /api/bug-reports/mine` - Return bug reports filed by the current user, newest first
+- `GET /api/bug-reports` - Return all bug reports (paginated). Global admins only
+- `PATCH /api/bug-reports/{report_id}` - Update a bug report's status. Global admins only
 
 ### Health & Monitoring
-- `GET /health` - Basic health check
-- `GET /ping` - Ping endpoint
-- `GET /api/health/api-status` - Sports API health status
-- `POST /api/health/reset-circuit-breakers` - Reset circuit breakers (admin only)
+- `GET /health` - Deep health check — verifies database and Redis connectivity
+- `GET /` - Root endpoint
+- `GET /api/health/api-status` - Get status of all sports data APIs and circuit breakers
+- `POST /api/health/reset-circuit-breakers` - Manually reset all circuit breakers
 
 ### WebSocket
-- `WS /ws/scores` - Live score updates (Redis pub/sub)
+- `WS /ws/scores` - Stream live score updates to connected clients
 
 Full API documentation available at `/docs` when the backend is running.
+<!-- AUTO:ENDPOINTS:END -->
 
 ## Background Jobs
 
@@ -420,15 +443,37 @@ For issues and questions:
 - Daily Picks and Fixed Teams modes
 - Live scoring and leaderboards
 - Admin dashboard and audit logging
+- Invite link sharing for competitions
+- Multi-provider sports API failover with circuit breakers
+- WebSocket live score updates
 
-### v2 (Future)
-- Additional leagues (MLS, EPL, UCL)
-- Advanced analytics and statistics
-- Badges and achievements
-- Social features (league chat, trash talk)
-- Email/push notifications
-- Multi-season tracking
-- Export functionality (PDF/CSV)
+### v2 (Planned)
+**New Leagues & Competitions:**
+- MLS (Major League Soccer)
+- EPL (English Premier League)
+- UCL / Europa League
+
+**Social & Engagement:**
+- Friend/follower system with "Friends only" leaderboard filter
+- League chat and trash talk features
+- Badges, achievements, and gamification
+- Hot streak and win streak tracking
+
+**Analytics & Data:**
+- Advanced statistics (head-to-head records, prediction accuracy trends)
+- More sophisticated data visualizations
+- Multi-season tracking and historical comparisons
+- Export league history as PDF/CSV
+
+**Notifications:**
+- Email notifications (opt-in) for picks, results, and competition updates
+- Push notifications for mobile
+
+**UX Improvements:**
+- Combined multi-league view (all games across leagues in one view)
+- User-selectable display timezone
+- "In Progress" live game status badges
+- Account reactivation emails for soft-deleted accounts
 
 ---
 

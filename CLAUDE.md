@@ -47,7 +47,9 @@ cd frontend && npm install && npm run dev
 ```
 backend/
   app/
-    api/          # Route handlers (auth, users, competitions, picks, leaderboards, leagues, bug_reports, admin, health, ws)
+<!-- AUTO:API_MODULES:START -->
+    api/          # Route handlers (admin, auth, bug_reports, competitions, health, invite, leaderboards, leagues, picks, users, ws)
+<!-- AUTO:API_MODULES:END -->
     core/         # config.py, security.py, deps.py
     db/           # session.py (async engine + session factory)
     models/       # SQLAlchemy ORM models (UUID PKs, async)
@@ -59,8 +61,12 @@ backend/
 
 frontend/
   src/
-    pages/        # Route components (Login, Register, Dashboard, Competitions)
-    components/   # Layout, ErrorBoundary, BugReportModal, GameCard, Leaderboard, Spinner
+<!-- AUTO:PAGES:START -->
+    pages/        # Route components (Admin, CompetitionDetail, Competitions, CreateCompetition, Dashboard, InviteLanding, Login, Register)
+<!-- AUTO:PAGES:END -->
+<!-- AUTO:COMPONENTS:START -->
+    components/   # BugReportModal, ErrorBoundary, GameCard, Layout, Leaderboard, Spinner
+<!-- AUTO:COMPONENTS:END -->
     services/     # api.ts (axios), authStore.ts (zustand)
     hooks/        # useLiveScores.ts (WebSocket)
     types/        # TypeScript interfaces
