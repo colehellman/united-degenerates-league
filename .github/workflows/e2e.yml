@@ -37,7 +37,7 @@ jobs:
       DISABLE_BACKGROUND_JOBS: "true"
       CORS_ORIGINS: "http://localhost:3000"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v5
         with:
