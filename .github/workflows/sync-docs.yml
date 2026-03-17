@@ -43,3 +43,11 @@ jobs:
           git add README.md CLAUDE.md
           git commit -m "docs: auto-sync documentation with codebase"
           git push
+
+      - name: Retrigger CI on the new commit
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          gh workflow run ci.yml --ref "$BRANCH"
