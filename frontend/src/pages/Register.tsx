@@ -61,12 +61,12 @@ export default function Register() {
     met ? 'text-green-600' : 'text-gray-400'
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h1 className="text-center text-3xl font-bold text-gray-900">
+        <h1 className="text-center text-3xl font-bold text-gray-900 dark:text-white">
           United Degenerates League
         </h1>
-        <h2 className="mt-6 text-center text-2xl font-semibold text-gray-700">
+        <h2 className="mt-6 text-center text-2xl font-semibold text-gray-700 dark:text-gray-300">
           Create your account
         </h2>
       </div>
@@ -81,7 +81,7 @@ export default function Register() {
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Email
               </label>
               <input
@@ -97,7 +97,7 @@ export default function Register() {
             </div>
 
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Username
               </label>
               <input
@@ -115,7 +115,7 @@ export default function Register() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Password
               </label>
               <input
@@ -146,7 +146,7 @@ export default function Register() {
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Confirm Password
               </label>
               <input
