@@ -15,10 +15,10 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate }
 })
 
-function renderRegister() {
+function renderRegister(initialPath = '/register') {
   vi.mocked(useAuthStore).mockReturnValue({ register: mockRegister } as any)
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Register />
     </MemoryRouter>,
   )
@@ -92,6 +92,19 @@ describe('Register — successful submission', () => {
     fireEvent.click(screen.getByRole('button', { name: /sign up/i }))
 
     expect(screen.getByRole('button', { name: /creating account/i })).toBeDisabled()
+  })
+})
+
+describe('Register — redirect after registration', () => {
+  it('navigates to redirect param after successful registration', async () => {
+    mockRegister.mockResolvedValueOnce(undefined)
+    renderRegister('/register?redirect=/invite/abc123')
+    fillForm()
+    fireEvent.click(screen.getByRole('button', { name: /sign up/i }))
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/invite/abc123')
+    })
   })
 })
 

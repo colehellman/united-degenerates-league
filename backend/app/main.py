@@ -12,7 +12,7 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.db.session import AsyncSessionLocal
-from app.api import auth, users, competitions, picks, leaderboards, admin, health, ws, leagues, bug_reports
+from app.api import auth, users, competitions, picks, leaderboards, admin, health, ws, leagues, bug_reports, invite
 
 # Import for lifespan
 from app.services.background_jobs import start_background_jobs, stop_background_jobs
@@ -159,6 +159,7 @@ app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(leagues.router, prefix="/api/leagues", tags=["Leagues"])
 app.include_router(health.router, prefix="/api/health", tags=["Health"])
 app.include_router(bug_reports.router, prefix="/api/bug-reports", tags=["Bug Reports"])
+app.include_router(invite.router, prefix="/api/invite", tags=["Invite Links"])
 app.include_router(ws.router, prefix="/ws", tags=["WebSocket"])
 
 

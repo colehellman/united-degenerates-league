@@ -19,6 +19,7 @@ vi.mock('./pages/Competitions', () => ({ default: () => <div>Competitions</div> 
 vi.mock('./pages/CompetitionDetail', () => ({ default: () => <div>CompetitionDetail</div> }))
 vi.mock('./pages/CreateCompetition', () => ({ default: () => <div>CreateCompetition</div> }))
 vi.mock('./pages/Admin', () => ({ default: () => <div>Admin</div> }))
+vi.mock('./pages/InviteLanding', () => ({ default: () => <div>InviteLanding</div> }))
 vi.mock('./components/Layout', async () => {
   const { Outlet } = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
   return { default: () => <Outlet /> }
@@ -103,5 +104,19 @@ describe('App — authenticated routing', () => {
   it('renders Admin at /admin', () => {
     renderApp('/admin')
     expect(screen.getByText('Admin')).toBeInTheDocument()
+  })
+})
+
+describe('App — invite route', () => {
+  it('renders InviteLanding at /invite/:token when NOT authenticated', () => {
+    currentStore = { isAuthenticated: false }
+    renderApp('/invite/abc123')
+    expect(screen.getByText('InviteLanding')).toBeInTheDocument()
+  })
+
+  it('renders InviteLanding at /invite/:token when authenticated', () => {
+    currentStore = { isAuthenticated: true }
+    renderApp('/invite/abc123')
+    expect(screen.getByText('InviteLanding')).toBeInTheDocument()
   })
 })
