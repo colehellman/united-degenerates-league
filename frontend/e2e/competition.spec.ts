@@ -1,17 +1,14 @@
 import { test, expect, Page } from "@playwright/test";
 
-const TEST_USER = {
-  email: `e2e-comp-${Date.now()}@test.com`,
-  username: `e2e_comp_${Date.now()}`,
-  password: "TestPass1!",
-};
+let userCounter = 0;
 
 async function registerAndLogin(page: Page) {
+  const id = `${Date.now()}_${userCounter++}`;
   await page.goto("/register");
-  await page.getByLabel("Email").fill(TEST_USER.email);
-  await page.getByLabel("Username").fill(TEST_USER.username);
-  await page.getByLabel("Password", { exact: true }).fill(TEST_USER.password);
-  await page.getByLabel("Confirm Password").fill(TEST_USER.password);
+  await page.getByLabel("Email").fill(`e2e-comp-${id}@test.com`);
+  await page.getByLabel("Username").fill(`e2e_comp_${id}`);
+  await page.getByLabel("Password", { exact: true }).fill("TestPass1!");
+  await page.getByLabel("Confirm Password").fill("TestPass1!");
   await page.getByRole("button", { name: /sign up/i }).click();
   await expect(page).toHaveURL("/", { timeout: 10_000 });
 }

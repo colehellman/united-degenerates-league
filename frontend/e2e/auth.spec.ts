@@ -1,21 +1,27 @@
 import { test, expect } from "@playwright/test";
 
-const TEST_USER = {
-  email: `e2e-${Date.now()}@test.com`,
-  username: `e2e_user_${Date.now()}`,
-  password: "TestPass1!",
-};
+let userCounter = 0;
+
+function uniqueUser() {
+  const id = `${Date.now()}_${userCounter++}`;
+  return {
+    email: `e2e-${id}@test.com`,
+    username: `e2e_user_${id}`,
+    password: "TestPass1!",
+  };
+}
 
 test.describe("Authentication Flow", () => {
   test("register a new account and land on dashboard", async ({ page }) => {
+    const user = uniqueUser();
     await page.goto("/register");
 
     await expect(page.getByRole("heading", { name: /create your account/i })).toBeVisible();
 
-    await page.getByLabel("Email").fill(TEST_USER.email);
-    await page.getByLabel("Username").fill(TEST_USER.username);
-    await page.getByLabel("Password", { exact: true }).fill(TEST_USER.password);
-    await page.getByLabel("Confirm Password").fill(TEST_USER.password);
+    await page.getByLabel("Email").fill(user.email);
+    await page.getByLabel("Username").fill(user.username);
+    await page.getByLabel("Password", { exact: true }).fill(user.password);
+    await page.getByLabel("Confirm Password").fill(user.password);
 
     // Password checks should all be green
     await expect(page.getByText("✓ At least 8 characters")).toBeVisible();
@@ -31,12 +37,14 @@ test.describe("Authentication Flow", () => {
   });
 
   test("logout and login with same credentials", async ({ page }) => {
-    // First register
+    const user = uniqueUser();
+
+    // Register a fresh user
     await page.goto("/register");
-    await page.getByLabel("Email").fill(TEST_USER.email);
-    await page.getByLabel("Username").fill(TEST_USER.username);
-    await page.getByLabel("Password", { exact: true }).fill(TEST_USER.password);
-    await page.getByLabel("Confirm Password").fill(TEST_USER.password);
+    await page.getByLabel("Email").fill(user.email);
+    await page.getByLabel("Username").fill(user.username);
+    await page.getByLabel("Password", { exact: true }).fill(user.password);
+    await page.getByLabel("Confirm Password").fill(user.password);
     await page.getByRole("button", { name: /sign up/i }).click();
     await expect(page).toHaveURL("/", { timeout: 10_000 });
 
@@ -45,8 +53,8 @@ test.describe("Authentication Flow", () => {
     await expect(page).toHaveURL("/login");
 
     // Login with same credentials
-    await page.getByLabel("Email").fill(TEST_USER.email);
-    await page.getByLabel("Password").fill(TEST_USER.password);
+    await page.getByLabel("Email").fill(user.email);
+    await page.getByLabel("Password").fill(user.password);
     await page.getByRole("button", { name: /sign in/i }).click();
 
     await expect(page).toHaveURL("/", { timeout: 10_000 });
