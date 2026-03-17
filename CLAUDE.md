@@ -48,7 +48,7 @@ cd frontend && npm install && npm run dev
 backend/
   app/
 <!-- AUTO:API_MODULES:START -->
-    api/          # Route handlers (admin, auth, bug_reports, competitions, health, leaderboards, leagues, picks, users, ws)
+    api/          # Route handlers (admin, auth, bug_reports, competitions, health, invite, leaderboards, leagues, picks, users, ws)
 <!-- AUTO:API_MODULES:END -->
     core/         # config.py, security.py, deps.py
     db/           # session.py (async engine + session factory)
@@ -62,7 +62,7 @@ backend/
 frontend/
   src/
 <!-- AUTO:PAGES:START -->
-    pages/        # Route components (Admin, CompetitionDetail, Competitions, CreateCompetition, Dashboard, Login, Register)
+    pages/        # Route components (Admin, CompetitionDetail, Competitions, CreateCompetition, Dashboard, InviteLanding, Login, Register)
 <!-- AUTO:PAGES:END -->
 <!-- AUTO:COMPONENTS:START -->
     components/   # BugReportModal, ErrorBoundary, GameCard, Layout, Leaderboard, Spinner

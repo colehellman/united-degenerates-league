@@ -185,6 +185,7 @@ Key models:
 - **BugReport**: User-submitted bug reports
 - **Competition**: Represents a competition (Daily Picks or Fixed Teams)
 - **Game**: Individual games/matches
+- **InviteLink**: A shareable invite link for a competition.
 - **League**: Sports leagues (NFL, NBA, etc.)
 - **Team**: Teams within leagues
 - **Golfer**: PGA golfers within a league
@@ -220,10 +221,15 @@ Key models:
 - `GET /api/competitions/{competition_id}` - Get a specific competition
 - `PATCH /api/competitions/{competition_id}` - Update a competition (admins only)
 - `DELETE /api/competitions/{competition_id}` - Delete a competition (global admins only)
-- `POST /api/competitions/{competition_id}/join` - Join a competition or request to join
+- `POST /api/competitions/{competition_id}/join` - Join a competition or request to join. Optionally pass an invite_token
+- `POST /api/competitions/{competition_id}/invite-links` - Create a shareable invite link for a competition
+- `GET /api/competitions/{competition_id}/invite-links` - List invite links for a competition. Participants see own, admins see all
 - `GET /api/competitions/{competition_id}/games` - Get games for a competition, optionally filtered by date
 - `POST /api/competitions/{competition_id}/sync-games` - Force an immediate ESPN game sync for a specific competition
 - `GET /api/competitions/{competition_id}/available-selections` - Get available teams/golfers for fixed team selection
+
+### Invites
+- `GET /api/invite/{token}` - Resolve an invite token to competition info. No auth required
 
 ### Picks
 - `POST /api/picks/{competition_id}/daily` - Create or update daily picks for multiple games
