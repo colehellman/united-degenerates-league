@@ -42,7 +42,7 @@ export default function Dashboard() {
           <Link to="/competitions/create" className="btn btn-primary">
             Create Competition
           </Link>
-          <Link to="/competitions" className="btn bg-gray-200 text-gray-700 hover:bg-gray-300">
+          <Link to="/competitions" className="btn btn-secondary">
             Browse Competitions
           </Link>
         </div>
@@ -50,10 +50,10 @@ export default function Dashboard() {
 
       {activeCompetitions.length === 0 && upcomingCompetitions.length === 0 && (
         <div className="card text-center py-12">
-          <h2 className="text-xl font-semibold text-gray-700 mb-4">
+          <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-4">
             You haven't joined any competitions yet
           </h2>
-          <p className="text-gray-600 mb-6">
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
             Create or join one now to start competing!
           </p>
           <Link to="/competitions" className="btn btn-primary">
