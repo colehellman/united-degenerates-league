@@ -1,28 +1,28 @@
 import logging
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func, delete
-from typing import List, Optional
 from datetime import datetime
 
-from app.core.deps import get_db, get_current_user, get_current_global_admin
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.deps import get_current_global_admin, get_current_user, get_db
 from app.core.limiter import limiter
-from app.models.user import User, AccountStatus, UserRole
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.competition import Competition, CompetitionStatus
-from app.models.participant import JoinRequest, JoinRequestStatus, Participant
 from app.models.game import Game, GameStatus
+from app.models.participant import JoinRequest, JoinRequestStatus, Participant
 from app.models.pick import Pick
-from app.models.audit_log import AuditLog, AuditAction
+from app.models.user import AccountStatus, User, UserRole
+from app.schemas.admin import (
+    AdminManagement,
+    CompetitionStatusChange,
+    ScoreCorrectionRequest,
+    UserRoleUpdate,
+    UserStatusUpdate,
+    WinnerDesignationRequest,
+)
 from app.schemas.participant import JoinRequestResponse, ParticipantWithUserResponse
 from app.schemas.user import UserResponse
-from app.schemas.admin import (
-    UserStatusUpdate,
-    UserRoleUpdate,
-    ScoreCorrectionRequest,
-    WinnerDesignationRequest,
-    CompetitionStatusChange,
-    AdminManagement,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +33,12 @@ router = APIRouter()
 # Helper: verify competition admin
 # ---------------------------------------------------------------------------
 
+
 async def _require_competition_admin(
     competition_id: str, current_user: User, db: AsyncSession
 ) -> Competition:
     """Fetch competition and verify the caller is a competition or global admin."""
-    result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = result.scalar_one_or_none()
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
@@ -56,6 +55,7 @@ async def _require_competition_admin(
 # ===========================================================================
 # USER MANAGEMENT (global admin only)
 # ===========================================================================
+
 
 @router.patch("/users/{user_id}/status", response_model=UserResponse)
 @limiter.limit("10/minute")
@@ -89,21 +89,24 @@ async def update_user_status(
     }
     audit_action = action_map.get(update.status, AuditAction.USER_SUSPENDED)
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=audit_action,
-        target_type="user",
-        target_id=target_user.id,
-        details={
-            "old_status": old_status,
-            "new_status": update.status.value,
-            "reason": update.reason,
-        },
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=audit_action,
+            target_type="user",
+            target_id=target_user.id,
+            details={
+                "old_status": old_status,
+                "new_status": update.status.value,
+                "reason": update.reason,
+            },
+        )
+    )
 
     # Revoke all tokens for suspended/banned users
     if update.status in (AccountStatus.SUSPENDED, AccountStatus.BANNED):
         from app.services.token_blacklist import blacklist_all_user_tokens
+
         blacklist_all_user_tokens(str(target_user.id))
 
     await db.commit()
@@ -132,20 +135,22 @@ async def update_user_role(
     old_role = target_user.role.value
     target_user.role = update.role
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=AuditAction.USER_ROLE_CHANGED,
-        target_type="user",
-        target_id=target_user.id,
-        details={"old_role": old_role, "new_role": update.role.value},
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=AuditAction.USER_ROLE_CHANGED,
+            target_type="user",
+            target_id=target_user.id,
+            details={"old_role": old_role, "new_role": update.role.value},
+        )
+    )
 
     await db.commit()
     await db.refresh(target_user)
     return UserResponse.model_validate(target_user)
 
 
-@router.get("/users", response_model=List[UserResponse])
+@router.get("/users", response_model=list[UserResponse])
 async def list_all_users(
     limit: int = 100,
     offset: int = 0,
@@ -168,6 +173,7 @@ async def list_all_users(
 # COMPETITION STATUS MANAGEMENT
 # ===========================================================================
 
+
 @router.post("/competitions/{competition_id}/status")
 @limiter.limit("10/minute")
 async def force_competition_status(
@@ -183,9 +189,7 @@ async def force_competition_status(
     by background jobs. This endpoint allows global admins to override that
     for exceptional situations like cancellations or early closures.
     """
-    result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = result.scalar_one_or_none()
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
@@ -194,17 +198,19 @@ async def force_competition_status(
     competition.status = update.status
     competition.updated_at = datetime.utcnow()
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=AuditAction.COMPETITION_STATUS_CHANGED,
-        target_type="competition",
-        target_id=competition.id,
-        details={
-            "old_status": old_status,
-            "new_status": update.status.value,
-            "reason": update.reason,
-        },
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=AuditAction.COMPETITION_STATUS_CHANGED,
+            target_type="competition",
+            target_id=competition.id,
+            details={
+                "old_status": old_status,
+                "new_status": update.status.value,
+                "reason": update.reason,
+            },
+        )
+    )
 
     await db.commit()
     return {"message": f"Competition status changed from {old_status} to {update.status.value}"}
@@ -213,6 +219,7 @@ async def force_competition_status(
 # ===========================================================================
 # SCORE CORRECTION
 # ===========================================================================
+
 
 @router.post("/games/{game_id}/correct-score")
 @limiter.limit("5/minute")
@@ -260,24 +267,27 @@ async def correct_game_score(
 
     # Re-score all picks for this game
     from app.services.score_service import score_picks_for_game
+
     await score_picks_for_game(db, game)
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=AuditAction.SCORE_CORRECTED,
-        target_type="game",
-        target_id=game.id,
-        details={
-            "competition_id": str(game.competition_id),
-            "old_home_score": old_home,
-            "old_away_score": old_away,
-            "old_winner_team_id": old_winner,
-            "new_home_score": correction.home_team_score,
-            "new_away_score": correction.away_team_score,
-            "new_winner_team_id": str(game.winner_team_id) if game.winner_team_id else None,
-            "reason": correction.reason,
-        },
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=AuditAction.SCORE_CORRECTED,
+            target_type="game",
+            target_id=game.id,
+            details={
+                "competition_id": str(game.competition_id),
+                "old_home_score": old_home,
+                "old_away_score": old_away,
+                "old_winner_team_id": old_winner,
+                "new_home_score": correction.home_team_score,
+                "new_away_score": correction.away_team_score,
+                "new_winner_team_id": str(game.winner_team_id) if game.winner_team_id else None,
+                "reason": correction.reason,
+            },
+        )
+    )
 
     await db.commit()
     return {
@@ -309,6 +319,7 @@ async def rescore_game(
         raise HTTPException(status_code=400, detail="Can only re-score final games")
 
     from app.services.score_service import score_picks_for_game
+
     await score_picks_for_game(db, game)
     await db.commit()
 
@@ -318,6 +329,7 @@ async def rescore_game(
 # ===========================================================================
 # WINNER DESIGNATION
 # ===========================================================================
+
 
 @router.post("/competitions/{competition_id}/winner")
 async def designate_winner(
@@ -331,9 +343,7 @@ async def designate_winner(
     Used for tie-breaker scenarios or manual override. The winner must be a
     participant in the competition.
     """
-    result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = result.scalar_one_or_none()
     if not competition:
         raise HTTPException(status_code=404, detail="Competition not found")
@@ -348,23 +358,27 @@ async def designate_winner(
         )
     )
     if not participant_check.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Winner must be a participant in the competition")
+        raise HTTPException(
+            status_code=400, detail="Winner must be a participant in the competition"
+        )
 
     old_winner = str(competition.winner_user_id) if competition.winner_user_id else None
     competition.winner_user_id = body.winner_user_id
     competition.updated_at = datetime.utcnow()
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=AuditAction.WINNER_DESIGNATED,
-        target_type="competition",
-        target_id=competition.id,
-        details={
-            "old_winner_user_id": old_winner,
-            "new_winner_user_id": str(body.winner_user_id),
-            "reason": body.reason,
-        },
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=AuditAction.WINNER_DESIGNATED,
+            target_type="competition",
+            target_id=competition.id,
+            details={
+                "old_winner_user_id": old_winner,
+                "new_winner_user_id": str(body.winner_user_id),
+                "reason": body.reason,
+            },
+        )
+    )
 
     await db.commit()
     return {"message": "Winner designated", "winner_user_id": str(body.winner_user_id)}
@@ -373,6 +387,7 @@ async def designate_winner(
 # ===========================================================================
 # PARTICIPANT MANAGEMENT
 # ===========================================================================
+
 
 @router.delete("/competitions/{competition_id}/participants/{user_id}")
 async def remove_participant(
@@ -403,28 +418,32 @@ async def remove_participant(
 
     await db.delete(participant)
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=AuditAction.PARTICIPANT_REMOVED,
-        target_type="competition",
-        target_id=competition.id,
-        details={
-            "removed_user_id": user_id,
-        },
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=AuditAction.PARTICIPANT_REMOVED,
+            target_type="competition",
+            target_id=competition.id,
+            details={
+                "removed_user_id": user_id,
+            },
+        )
+    )
 
     await db.commit()
     return {"message": "Participant removed"}
 
 
-@router.get("/competitions/{competition_id}/participants", response_model=List[ParticipantWithUserResponse])
+@router.get(
+    "/competitions/{competition_id}/participants", response_model=list[ParticipantWithUserResponse]
+)
 async def list_competition_participants(
     competition_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List all participants in a competition with user details (competition admin or global admin)."""
-    competition = await _require_competition_admin(competition_id, current_user, db)
+    await _require_competition_admin(competition_id, current_user, db)
 
     rows_result = await db.execute(
         select(Participant, User)
@@ -454,6 +473,7 @@ async def list_competition_participants(
 # COMPETITION ADMIN MANAGEMENT
 # ===========================================================================
 
+
 @router.post("/competitions/{competition_id}/admins")
 async def add_competition_admin(
     competition_id: str,
@@ -474,16 +494,18 @@ async def add_competition_admin(
         raise HTTPException(status_code=400, detail="User is already a competition admin")
 
     # Mutate the list (SQLAlchemy needs a new list assigned to detect the change)
-    competition.league_admin_ids = competition.league_admin_ids + [body.user_id]
+    competition.league_admin_ids = [*competition.league_admin_ids, body.user_id]
     competition.updated_at = datetime.utcnow()
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=AuditAction.ADMIN_ADDED,
-        target_type="competition",
-        target_id=competition.id,
-        details={"added_user_id": str(body.user_id)},
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=AuditAction.ADMIN_ADDED,
+            target_type="competition",
+            target_id=competition.id,
+            details={"added_user_id": str(body.user_id)},
+        )
+    )
 
     await db.commit()
     return {"message": "Admin added", "user_id": str(body.user_id)}
@@ -501,13 +523,16 @@ async def remove_competition_admin(
 
     # Prevent removing the creator
     if str(competition.creator_id) == admin_user_id:
-        raise HTTPException(status_code=400, detail="Cannot remove the competition creator as admin")
+        raise HTTPException(
+            status_code=400, detail="Cannot remove the competition creator as admin"
+        )
 
     import uuid as uuid_mod
+
     try:
         target_uuid = uuid_mod.UUID(admin_user_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid user ID")
+        raise HTTPException(status_code=400, detail="Invalid user ID") from None
 
     if target_uuid not in competition.league_admin_ids:
         raise HTTPException(status_code=404, detail="User is not a competition admin")
@@ -517,13 +542,15 @@ async def remove_competition_admin(
     ]
     competition.updated_at = datetime.utcnow()
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=AuditAction.ADMIN_REMOVED,
-        target_type="competition",
-        target_id=competition.id,
-        details={"removed_user_id": admin_user_id},
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=AuditAction.ADMIN_REMOVED,
+            target_type="competition",
+            target_id=competition.id,
+            details={"removed_user_id": admin_user_id},
+        )
+    )
 
     await db.commit()
     return {"message": "Admin removed", "user_id": admin_user_id}
@@ -533,10 +560,11 @@ async def remove_competition_admin(
 # JOIN REQUESTS
 # ===========================================================================
 
-@router.get("/join-requests/{competition_id}", response_model=List[JoinRequestResponse])
+
+@router.get("/join-requests/{competition_id}", response_model=list[JoinRequestResponse])
 async def get_join_requests(
     competition_id: str,
-    status_filter: Optional[JoinRequestStatus] = None,
+    status_filter: JoinRequestStatus | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -559,9 +587,7 @@ async def approve_join_request(
     db: AsyncSession = Depends(get_db),
 ):
     """Approve a join request (admins only)."""
-    request_result = await db.execute(
-        select(JoinRequest).where(JoinRequest.id == request_id)
-    )
+    request_result = await db.execute(select(JoinRequest).where(JoinRequest.id == request_id))
     join_request = request_result.scalar_one_or_none()
     if not join_request:
         raise HTTPException(status_code=404, detail="Join request not found")
@@ -586,16 +612,18 @@ async def approve_join_request(
     )
     db.add(participant)
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=AuditAction.JOIN_REQUEST_APPROVED,
-        target_type="join_request",
-        target_id=join_request.id,
-        details={
-            "competition_id": str(competition.id),
-            "user_id": str(join_request.user_id),
-        },
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=AuditAction.JOIN_REQUEST_APPROVED,
+            target_type="join_request",
+            target_id=join_request.id,
+            details={
+                "competition_id": str(competition.id),
+                "user_id": str(join_request.user_id),
+            },
+        )
+    )
 
     await db.commit()
     return {"message": "Join request approved"}
@@ -604,14 +632,12 @@ async def approve_join_request(
 @router.post("/join-requests/{request_id}/reject")
 async def reject_join_request(
     request_id: str,
-    reason: Optional[str] = None,
+    reason: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Reject a join request (admins only)."""
-    request_result = await db.execute(
-        select(JoinRequest).where(JoinRequest.id == request_id)
-    )
+    request_result = await db.execute(select(JoinRequest).where(JoinRequest.id == request_id))
     join_request = request_result.scalar_one_or_none()
     if not join_request:
         raise HTTPException(status_code=404, detail="Join request not found")
@@ -625,17 +651,19 @@ async def reject_join_request(
     join_request.reviewed_at = datetime.utcnow()
     join_request.rejection_reason = reason
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=AuditAction.JOIN_REQUEST_REJECTED,
-        target_type="join_request",
-        target_id=join_request.id,
-        details={
-            "competition_id": str(competition.id),
-            "user_id": str(join_request.user_id),
-            "reason": reason,
-        },
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=AuditAction.JOIN_REQUEST_REJECTED,
+            target_type="join_request",
+            target_id=join_request.id,
+            details={
+                "competition_id": str(competition.id),
+                "user_id": str(join_request.user_id),
+                "reason": reason,
+            },
+        )
+    )
 
     await db.commit()
     return {"message": "Join request rejected"}
@@ -645,6 +673,7 @@ async def reject_join_request(
 # GAME SYNC
 # ===========================================================================
 
+
 @router.post("/sync-games")
 async def force_sync_games(
     background_tasks: BackgroundTasks,
@@ -652,6 +681,7 @@ async def force_sync_games(
 ):
     """Trigger an immediate game sync from ESPN (global admins only)."""
     from app.services.background_jobs import sync_games_from_api
+
     background_tasks.add_task(sync_games_from_api)
     return {"message": "Game sync triggered"}
 
@@ -660,10 +690,11 @@ async def force_sync_games(
 # AUDIT LOGS
 # ===========================================================================
 
+
 @router.get("/audit-logs")
 async def get_audit_logs(
-    competition_id: Optional[str] = None,
-    action_filter: Optional[AuditAction] = None,
+    competition_id: str | None = None,
+    action_filter: AuditAction | None = None,
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
@@ -718,6 +749,7 @@ async def get_audit_logs(
 # PLATFORM ANALYTICS (global admin only)
 # ===========================================================================
 
+
 @router.get("/stats")
 async def platform_stats(
     current_user: User = Depends(get_current_global_admin),
@@ -728,12 +760,11 @@ async def platform_stats(
         select(func.count()).select_from(User).where(User.status != AccountStatus.DELETED)
     )
     active_competitions = await db.scalar(
-        select(func.count()).select_from(Competition)
+        select(func.count())
+        .select_from(Competition)
         .where(Competition.status == CompetitionStatus.ACTIVE)
     )
-    total_competitions = await db.scalar(
-        select(func.count()).select_from(Competition)
-    )
+    total_competitions = await db.scalar(select(func.count()).select_from(Competition))
     total_picks = await db.scalar(select(func.count()).select_from(Pick))
     total_games = await db.scalar(select(func.count()).select_from(Game))
 
@@ -750,21 +781,24 @@ async def platform_stats(
 # GLOBAL ADMIN — ALL COMPETITIONS VISIBILITY
 # ===========================================================================
 
+
 @router.get("/competitions")
 async def list_all_competitions(
-    status_filter: Optional[CompetitionStatus] = None,
+    status_filter: CompetitionStatus | None = None,
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_global_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """List all competitions with participant counts (global admin only)."""
-    query = select(
-        Competition,
-        func.count(Participant.id).label("participant_count"),
-    ).outerjoin(
-        Participant, Competition.id == Participant.competition_id
-    ).group_by(Competition.id)
+    query = (
+        select(
+            Competition,
+            func.count(Participant.id).label("participant_count"),
+        )
+        .outerjoin(Participant, Competition.id == Participant.competition_id)
+        .group_by(Competition.id)
+    )
 
     if status_filter:
         query = query.where(Competition.status == status_filter)

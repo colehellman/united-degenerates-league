@@ -30,6 +30,7 @@ if _is_test:
     def _noop_limit(*args, **kwargs):
         def decorator(func):
             return func
+
         return decorator
 
     limiter.limit = _noop_limit

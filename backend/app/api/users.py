@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select
 from datetime import datetime, timedelta
 
-from app.core.deps import get_db, get_current_user
-from app.models.user import User, AccountStatus
-from app.schemas.user import UserResponse, UserUpdate, PasswordChange
-from app.core.security import verify_password, get_password_hash
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.deps import get_current_user, get_db
+from app.core.security import get_password_hash, verify_password
+from app.models.user import AccountStatus, User
+from app.schemas.user import PasswordChange, UserResponse, UserUpdate
 from app.services.token_blacklist import blacklist_all_user_tokens
 
 router = APIRouter()
@@ -51,7 +52,7 @@ async def update_current_user(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Username already taken",
-        )
+        ) from None
     await db.refresh(current_user)
 
     return UserResponse.model_validate(current_user)

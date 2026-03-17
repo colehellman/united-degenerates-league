@@ -1,7 +1,8 @@
-from pydantic import BaseModel, EmailStr, Field, UUID4, field_validator
 from datetime import datetime
-from typing import Optional
-from app.models.user import UserRole, AccountStatus
+
+from pydantic import UUID4, BaseModel, EmailStr, Field, field_validator
+
+from app.models.user import AccountStatus, UserRole
 
 
 class UserBase(BaseModel):
@@ -10,10 +11,26 @@ class UserBase(BaseModel):
 
 
 COMMON_PASSWORDS = {
-    "password", "password1", "password123", "12345678", "123456789",
-    "qwerty123", "admin123", "letmein1", "welcome1", "monkey123",
-    "abc12345", "iloveyou", "sunshine1", "princess1", "football1",
-    "charlie1", "shadow12", "master12", "dragon12", "mustang1",
+    "password",
+    "password1",
+    "password123",
+    "12345678",
+    "123456789",
+    "qwerty123",
+    "admin123",
+    "letmein1",
+    "welcome1",
+    "monkey123",
+    "abc12345",
+    "iloveyou",
+    "sunshine1",
+    "princess1",
+    "football1",
+    "charlie1",
+    "shadow12",
+    "master12",
+    "dragon12",
+    "mustang1",
 }
 
 
@@ -44,7 +61,7 @@ class UserResponse(UserBase):
     role: UserRole
     status: AccountStatus
     created_at: datetime
-    last_login_at: Optional[datetime] = None
+    last_login_at: datetime | None = None
     has_dismissed_onboarding: bool
 
     class Config:
@@ -59,8 +76,8 @@ class TokenResponse(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    username: Optional[str] = Field(None, min_length=3, max_length=50)
-    has_dismissed_onboarding: Optional[bool] = None
+    username: str | None = Field(None, min_length=3, max_length=50)
+    has_dismissed_onboarding: bool | None = None
 
 
 class PasswordChange(BaseModel):

@@ -179,6 +179,9 @@ jspm_packages/
 
 # Testing
 /coverage
+test-results/
+playwright-report/
+blob-report/
 
 # Production
 /build

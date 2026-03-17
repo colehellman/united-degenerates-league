@@ -1,0 +1,52 @@
+target-version = "py311"
+line-length = 100
+
+[lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort (import sorting)
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "T20",    # flake8-print (no print statements)
+    "RET",    # flake8-return
+    "S",      # flake8-bandit (security)
+    "A",      # flake8-builtins
+    "C4",     # flake8-comprehensions
+    "DTZ",    # flake8-datetimez
+    "PIE",    # flake8-pie
+    "RUF",    # ruff-specific rules
+]
+ignore = [
+    "S101",   # assert is fine in tests
+    "S105",   # hardcoded passwords in config defaults are expected
+    "S106",   # same as above
+    "S107",   # same as above (function arg defaults)
+    "B008",   # Depends() in function args is a FastAPI pattern
+    "RET504", # unnecessary assignment before return (readability preference)
+    "DTZ003", # utcnow() is used throughout — migrate to tz-aware in a dedicated PR
+    "DTZ001", # datetime without tz — same as above
+    "DTZ007", # strptime without tz — same as above
+    "E501",   # line length handled by formatter, not linter
+    "UP035",  # deprecated typing imports — auto-fix changes too many files at once
+    "SIM117", # nested with statements — readability preference in async code
+    "E741",   # ambiguous variable name — false positives on short lambdas
+    "RUF002", # ambiguous unicode — false positive on docstring content
+    "RUF003", # ambiguous unicode — false positive on comment content
+    "N817",   # camelCase import alias — follows library convention
+]
+
+[lint.per-file-ignores]
+"tests/**" = ["S", "T20"]           # security + print OK in tests
+"alembic/**" = ["E501", "I", "UP"]  # auto-generated migrations
+
+[lint.isort]
+known-first-party = ["app"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

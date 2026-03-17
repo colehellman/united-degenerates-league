@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0 --port $PORT",
     "start": "vite preview --host 0.0.0.0 --port $PORT",
     "test": "vitest",
+    "test:e2e": "playwright test",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@testing-library/jest-dom": "^6.2.0",
     "@testing-library/react": "^14.1.2",
     "@types/react": "^18.2.43",

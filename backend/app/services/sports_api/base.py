@@ -1,10 +1,10 @@
+import logging
 from abc import ABC, abstractmethod
-from typing import List, Dict, Optional, Any
 from datetime import datetime
 from enum import Enum
+
 import httpx
-import logging
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
 
@@ -31,29 +31,29 @@ class GameData:
         away_team: str,
         scheduled_start_time: datetime,
         status: str,
-        home_score: Optional[int] = None,
-        away_score: Optional[int] = None,
-        venue: Optional[str] = None,
-        raw_data: Optional[Dict] = None,
+        home_score: int | None = None,
+        away_score: int | None = None,
+        venue: str | None = None,
+        raw_data: dict | None = None,
         # Team identifiers for matching/creating team records
-        home_team_external_id: Optional[str] = None,
-        away_team_external_id: Optional[str] = None,
-        home_team_abbreviation: Optional[str] = None,
-        away_team_abbreviation: Optional[str] = None,
+        home_team_external_id: str | None = None,
+        away_team_external_id: str | None = None,
+        home_team_abbreviation: str | None = None,
+        away_team_abbreviation: str | None = None,
         # Season win/loss/tie record at the time the game data was fetched.
         # Sourced from the "overall" record in the sports API response.
         # None means the API did not provide record data for this team.
-        home_team_wins: Optional[int] = None,
-        home_team_losses: Optional[int] = None,
-        home_team_ties: Optional[int] = None,
-        away_team_wins: Optional[int] = None,
-        away_team_losses: Optional[int] = None,
-        away_team_ties: Optional[int] = None,
+        home_team_wins: int | None = None,
+        home_team_losses: int | None = None,
+        home_team_ties: int | None = None,
+        away_team_wins: int | None = None,
+        away_team_losses: int | None = None,
+        away_team_ties: int | None = None,
         # Betting odds sourced from ESPN (DraftKings).
         # spread is home-team perspective: -3.5 means home favored by 3.5.
         # None when the API does not supply odds (e.g. pre-season, non-covered leagues).
-        spread: Optional[float] = None,
-        over_under: Optional[float] = None,
+        spread: float | None = None,
+        over_under: float | None = None,
     ):
         self.external_id = external_id
         self.home_team = home_team
@@ -102,7 +102,7 @@ class BaseSportsAPIClient(ABC):
         league: str,
         start_date: datetime,
         end_date: datetime,
-    ) -> List[GameData]:
+    ) -> list[GameData]:
         """
         Fetch game schedule for a league within a date range.
 
@@ -114,10 +114,9 @@ class BaseSportsAPIClient(ABC):
         Returns:
             List of GameData objects
         """
-        pass
 
     @abstractmethod
-    async def get_live_scores(self, league: str) -> List[GameData]:
+    async def get_live_scores(self, league: str) -> list[GameData]:
         """
         Fetch live scores for ongoing games in a league.
 
@@ -127,10 +126,9 @@ class BaseSportsAPIClient(ABC):
         Returns:
             List of GameData objects with current scores
         """
-        pass
 
     @abstractmethod
-    async def get_game_details(self, league: str, game_id: str) -> Optional[GameData]:
+    async def get_game_details(self, league: str, game_id: str) -> GameData | None:
         """
         Fetch detailed information for a specific game.
 
@@ -141,7 +139,6 @@ class BaseSportsAPIClient(ABC):
         Returns:
             GameData object or None if not found
         """
-        pass
 
     @retry(
         stop=stop_after_attempt(settings.API_MAX_RETRIES),
@@ -152,9 +149,9 @@ class BaseSportsAPIClient(ABC):
         self,
         method: str,
         url: str,
-        headers: Optional[Dict] = None,
-        params: Optional[Dict] = None,
-    ) -> Dict:
+        headers: dict | None = None,
+        params: dict | None = None,
+    ) -> dict:
         """
         Make HTTP request with retry logic.
 
@@ -186,27 +183,20 @@ class BaseSportsAPIClient(ABC):
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
-                logger.warning(
-                    f"{self.provider}: Rate limit exceeded (429) - {url}"
-                )
-                raise RateLimitExceededError(f"Rate limit exceeded for {self.provider}")
-            elif e.response.status_code >= 500:
-                logger.error(
-                    f"{self.provider}: Server error ({e.response.status_code}) - {url}"
-                )
+                logger.warning(f"{self.provider}: Rate limit exceeded (429) - {url}")
+                raise RateLimitExceededError(f"Rate limit exceeded for {self.provider}") from None
+            if e.response.status_code >= 500:
+                logger.error(f"{self.provider}: Server error ({e.response.status_code}) - {url}")
                 raise
-            else:
-                logger.error(
-                    f"{self.provider}: Client error ({e.response.status_code}) - {url}"
-                )
-                raise
+            logger.error(f"{self.provider}: Client error ({e.response.status_code}) - {url}")
+            raise
 
         except httpx.TimeoutException:
             logger.warning(f"{self.provider}: Request timeout - {url}")
             raise
 
         except Exception as e:
-            logger.error(f"{self.provider}: Unexpected error - {url}: {str(e)}")
+            logger.error(f"{self.provider}: Unexpected error - {url}: {e!s}")
             raise
 
     def _parse_datetime(self, date_str: str) -> datetime:
@@ -234,14 +224,11 @@ class BaseSportsAPIClient(ABC):
         Returns:
             API-specific league identifier
         """
-        pass
 
 
 class RateLimitExceededError(Exception):
     """Raised when API rate limit is exceeded"""
-    pass
 
 
 class APIUnavailableError(Exception):
     """Raised when API is unavailable"""
-    pass

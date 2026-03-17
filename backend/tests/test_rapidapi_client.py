@@ -1,9 +1,10 @@
-import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
-from app.services.sports_api.rapidapi_client import RapidAPIClient
+import pytest
+
 from app.services.sports_api.base import GameData
+from app.services.sports_api.rapidapi_client import RapidAPIClient
 
 
 @pytest.fixture
@@ -138,7 +139,9 @@ async def test_get_game_details_success(client: RapidAPIClient):
 @pytest.mark.asyncio
 async def test_get_game_details_empty_response_returns_none(client: RapidAPIClient):
     """get_game_details returns None when response list is empty."""
-    with patch.object(client, "_make_request", new_callable=AsyncMock, return_value={"response": []}):
+    with patch.object(
+        client, "_make_request", new_callable=AsyncMock, return_value={"response": []}
+    ):
         game = await client.get_game_details("NFL", "missing")
         assert game is None
 

@@ -1,16 +1,15 @@
 """Tests for the /api/bug-reports endpoints."""
-import pytest
+
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
-from app.models.bug_report import BugReportStatus
 from tests.conftest import _login, _make_global_admin
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _submit_report(client: AsyncClient, token: str, **overrides) -> dict:
     payload = {
@@ -31,7 +30,10 @@ async def _submit_report(client: AsyncClient, token: str, **overrides) -> dict:
 # POST /api/bug-reports
 # ---------------------------------------------------------------------------
 
-async def test_submit_bug_report_success(client: AsyncClient, test_user: User, db_session: AsyncSession):
+
+async def test_submit_bug_report_success(
+    client: AsyncClient, test_user: User, db_session: AsyncSession
+):
     token = await _login(client)
     resp = await _submit_report(client, token)
 
@@ -45,7 +47,9 @@ async def test_submit_bug_report_success(client: AsyncClient, test_user: User, d
     assert "created_at" in data
 
 
-async def test_submit_bug_report_with_page_url(client: AsyncClient, test_user: User, db_session: AsyncSession):
+async def test_submit_bug_report_with_page_url(
+    client: AsyncClient, test_user: User, db_session: AsyncSession
+):
     token = await _login(client)
     resp = await _submit_report(client, token, page_url="/competitions/123")
 
@@ -61,14 +65,18 @@ async def test_submit_bug_report_unauthenticated(client: AsyncClient, db_session
     assert resp.status_code == 401
 
 
-async def test_submit_bug_report_title_too_short(client: AsyncClient, test_user: User, db_session: AsyncSession):
+async def test_submit_bug_report_title_too_short(
+    client: AsyncClient, test_user: User, db_session: AsyncSession
+):
     token = await _login(client)
     resp = await _submit_report(client, token, title="Bug")  # < 5 chars
 
     assert resp.status_code == 422
 
 
-async def test_submit_bug_report_description_too_short(client: AsyncClient, test_user: User, db_session: AsyncSession):
+async def test_submit_bug_report_description_too_short(
+    client: AsyncClient, test_user: User, db_session: AsyncSession
+):
     token = await _login(client)
     resp = await _submit_report(client, token, description="short")  # < 10 chars
 
@@ -78,6 +86,7 @@ async def test_submit_bug_report_description_too_short(client: AsyncClient, test
 # ---------------------------------------------------------------------------
 # GET /api/bug-reports/mine
 # ---------------------------------------------------------------------------
+
 
 async def test_get_my_reports_empty(client: AsyncClient, test_user: User, db_session: AsyncSession):
     token = await _login(client)
@@ -115,6 +124,7 @@ async def test_get_my_reports_unauthenticated(client: AsyncClient, db_session: A
 # GET /api/bug-reports  (admin)
 # ---------------------------------------------------------------------------
 
+
 async def test_admin_list_all_reports(
     client: AsyncClient, test_user: User, second_user: User, db_session: AsyncSession
 ):
@@ -134,7 +144,9 @@ async def test_admin_list_all_reports(
     assert len(resp.json()) == 2
 
 
-async def test_non_admin_cannot_list_all_reports(client: AsyncClient, test_user: User, db_session: AsyncSession):
+async def test_non_admin_cannot_list_all_reports(
+    client: AsyncClient, test_user: User, db_session: AsyncSession
+):
     token = await _login(client)
     resp = await client.get("/api/bug-reports", headers={"Authorization": f"Bearer {token}"})
     # Regular users get 403 from get_current_global_admin dep
@@ -144,6 +156,7 @@ async def test_non_admin_cannot_list_all_reports(client: AsyncClient, test_user:
 # ---------------------------------------------------------------------------
 # PATCH /api/bug-reports/{id}  (admin)
 # ---------------------------------------------------------------------------
+
 
 async def test_admin_update_status(client: AsyncClient, test_user: User, db_session: AsyncSession):
     token = await _login(client)
@@ -163,8 +176,11 @@ async def test_admin_update_status(client: AsyncClient, test_user: User, db_sess
     assert resp.json()["status"] == "in_review"
 
 
-async def test_admin_update_status_not_found(client: AsyncClient, test_user: User, db_session: AsyncSession):
+async def test_admin_update_status_not_found(
+    client: AsyncClient, test_user: User, db_session: AsyncSession
+):
     import uuid
+
     await _make_global_admin(db_session, test_user)
     token = await _login(client)
 
@@ -176,7 +192,9 @@ async def test_admin_update_status_not_found(client: AsyncClient, test_user: Use
     assert resp.status_code == 404
 
 
-async def test_non_admin_cannot_update_status(client: AsyncClient, test_user: User, db_session: AsyncSession):
+async def test_non_admin_cannot_update_status(
+    client: AsyncClient, test_user: User, db_session: AsyncSession
+):
     token = await _login(client)
     create_resp = await _submit_report(client, token)
     report_id = create_resp.json()["id"]

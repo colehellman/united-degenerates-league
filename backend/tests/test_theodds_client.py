@@ -1,10 +1,11 @@
 """Tests for TheOddsAPIClient covering all public methods and parse helpers."""
-import pytest
-from datetime import datetime, timedelta, timezone
+
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from app.services.sports_api.theodds_client import TheOddsAPIClient
-from app.services.sports_api.base import GameData, RateLimitExceededError
 
 
 @pytest.fixture
@@ -13,6 +14,7 @@ def client():
 
 
 # ── _map_league_name ─────────────────────────────────────────────────────────
+
 
 def test_map_league_name_known(client: TheOddsAPIClient):
     assert client._map_league_name("NFL") == "americanfootball_nfl"
@@ -29,11 +31,12 @@ def test_map_league_name_unknown(client: TheOddsAPIClient):
 
 # ── get_schedule ─────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_get_schedule_success(client: TheOddsAPIClient):
     """get_schedule returns games within the date range."""
     # _parse_datetime returns tz-aware datetimes; use tz-aware bounds for comparison
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     mock_response = [
         {
             "id": "odds_game_1",
@@ -56,7 +59,7 @@ async def test_get_schedule_success(client: TheOddsAPIClient):
 @pytest.mark.asyncio
 async def test_get_schedule_filters_outside_date_range(client: TheOddsAPIClient):
     """Games outside the date range are excluded."""
-    old_dt = datetime.now(timezone.utc) - timedelta(days=5)
+    old_dt = datetime.now(UTC) - timedelta(days=5)
     old_time = old_dt.isoformat().replace("+00:00", "Z")
     mock_response = [
         {
@@ -66,7 +69,7 @@ async def test_get_schedule_filters_outside_date_range(client: TheOddsAPIClient)
             "commence_time": old_time,
         }
     ]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with patch.object(client, "_make_request", new_callable=AsyncMock, return_value=mock_response):
         games = await client.get_schedule(
             "NFL",
@@ -94,6 +97,7 @@ async def test_get_schedule_exception_returns_empty(client: TheOddsAPIClient):
 
 
 # ── get_live_scores ───────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_get_live_scores_success(client: TheOddsAPIClient):
@@ -144,13 +148,28 @@ async def test_get_live_scores_exception_returns_empty(client: TheOddsAPIClient)
 
 # ── get_game_details ──────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_get_game_details_success(client: TheOddsAPIClient):
     """get_game_details finds game by ID from scores endpoint."""
     now = datetime.utcnow().isoformat() + "Z"
     mock_response = [
-        {"id": "target_game", "home_team": "A", "away_team": "B", "commence_time": now, "completed": True, "scores": []},
-        {"id": "other_game", "home_team": "C", "away_team": "D", "commence_time": now, "completed": False, "scores": []},
+        {
+            "id": "target_game",
+            "home_team": "A",
+            "away_team": "B",
+            "commence_time": now,
+            "completed": True,
+            "scores": [],
+        },
+        {
+            "id": "other_game",
+            "home_team": "C",
+            "away_team": "D",
+            "commence_time": now,
+            "completed": False,
+            "scores": [],
+        },
     ]
     with patch.object(client, "_make_request", new_callable=AsyncMock, return_value=mock_response):
         game = await client.get_game_details("NFL", "target_game")
@@ -185,6 +204,7 @@ async def test_get_game_details_exception_returns_none(client: TheOddsAPIClient)
 
 # ── _parse_event ──────────────────────────────────────────────────────────────
 
+
 def test_parse_event_success(client: TheOddsAPIClient):
     """_parse_event returns scheduled GameData from odds event."""
     event = {
@@ -212,6 +232,7 @@ def test_parse_event_no_commence_time(client: TheOddsAPIClient):
 
 
 # ── _parse_score_event ────────────────────────────────────────────────────────
+
 
 def test_parse_score_event_live(client: TheOddsAPIClient):
     """_parse_score_event maps non-completed event to in_progress."""

@@ -1,18 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from typing import List, Optional
 
-from app.core.deps import get_db, get_current_user
-from app.models.user import User
+from app.core.deps import get_current_user, get_db
 from app.models.competition import Competition, Visibility
 from app.models.participant import Participant
+from app.models.user import User
 from app.schemas.participant import LeaderboardEntry
 
 router = APIRouter()
 
 
-@router.get("/{competition_id}", response_model=List[LeaderboardEntry])
+@router.get("/{competition_id}", response_model=list[LeaderboardEntry])
 async def get_leaderboard(
     competition_id: str,
     sort_by: str = Query("points", regex="^(points|accuracy|wins|streak)$"),
@@ -21,9 +20,7 @@ async def get_leaderboard(
 ):
     """Get leaderboard for a competition"""
     # Verify competition exists
-    comp_result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    comp_result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = comp_result.scalar_one_or_none()
 
     if not competition:

@@ -1,26 +1,27 @@
+import logging
+from datetime import datetime, timedelta
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from datetime import datetime, timedelta
-import logging
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.core.config import settings
-from app.db.session import async_session
-from app.services.ws_manager import ScoreManager
-from app.models.game import Game, GameStatus
-from app.models.competition import Competition, CompetitionStatus
-from app.models.league import Team
-from app.services.sports_api.sports_service import sports_service
-from app.services.score_service import score_picks_for_game
-from app.services.sync_service import (
-    _find_or_create_team,
-    _apply_team_record,
-    _sync_game_for_competition,
-)
 import app.services.competition_service as competition_service
 import app.services.pick_service as pick_service
 import app.services.user_service as user_service
+from app.core.config import settings
+from app.db.session import async_session
+from app.models.competition import Competition, CompetitionStatus
+from app.models.game import Game, GameStatus
+from app.models.league import Team
+from app.services.score_service import score_picks_for_game
+from app.services.sports_api.sports_service import sports_service
+from app.services.sync_service import (
+    _apply_team_record,
+    _find_or_create_team,
+    _sync_game_for_competition,
+)
+from app.services.ws_manager import ScoreManager
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +39,7 @@ async def update_game_scores():
             # Fetch games that need score updates
             stmt = (
                 select(Game)
-                .where(
-                    Game.status.in_([GameStatus.SCHEDULED, GameStatus.IN_PROGRESS])
-                )
+                .where(Game.status.in_([GameStatus.SCHEDULED, GameStatus.IN_PROGRESS]))
                 .options(
                     selectinload(Game.competition).selectinload(Competition.league),
                     selectinload(Game.home_team),
@@ -75,18 +74,20 @@ async def update_game_scores():
                         if not score_data:
                             continue
 
-                        was_not_final = game.status != GameStatus.FINAL
                         game.status = GameStatus(score_data.status)
                         game.home_team_score = score_data.home_score
                         game.away_team_score = score_data.away_score
-                        
+
                         if score_data.spread is not None:
                             game.spread = score_data.spread
                         if score_data.over_under is not None:
                             game.over_under = score_data.over_under
 
                         if game.status == GameStatus.FINAL:
-                            if score_data.home_score is not None and score_data.away_score is not None:
+                            if (
+                                score_data.home_score is not None
+                                and score_data.away_score is not None
+                            ):
                                 if score_data.home_score > score_data.away_score:
                                     game.winner_team_id = game.home_team_id
                                 elif score_data.away_score > score_data.home_score:
@@ -95,7 +96,11 @@ async def update_game_scores():
                                     game.winner_team_id = None
                             else:
                                 game.winner_team_id = None
-                        elif game.status in [GameStatus.CANCELLED, GameStatus.POSTPONED, GameStatus.NO_RESULT]:
+                        elif game.status in [
+                            GameStatus.CANCELLED,
+                            GameStatus.POSTPONED,
+                            GameStatus.NO_RESULT,
+                        ]:
                             game.winner_team_id = None
 
                         game.updated_at = datetime.utcnow()
@@ -116,7 +121,7 @@ async def update_game_scores():
                                 )
 
                 except Exception as e:
-                    logger.error(f"Error updating scores for {league_name}: {str(e)}")
+                    logger.error(f"Error updating scores for {league_name}: {e!s}")
                     continue
 
             await db.commit()
@@ -137,7 +142,7 @@ async def update_game_scores():
                 await ScoreManager.publish_score_update(ws_payload)
 
             if updated_games and sports_service.redis_client:
-                competition_ids = set(game.competition_id for game in updated_games)
+                competition_ids = {game.competition_id for game in updated_games}
                 for comp_id in competition_ids:
                     cache_key = f"leaderboard:{comp_id}"
                     try:
@@ -146,7 +151,7 @@ async def update_game_scores():
                         logger.error(f"Error invalidating cache: {e}")
 
         except Exception as e:
-            logger.error(f"Error in update_game_scores: {str(e)}", exc_info=True)
+            logger.error(f"Error in update_game_scores: {e!s}", exc_info=True)
             await db.rollback()
 
 
@@ -156,7 +161,7 @@ async def wrap_update_competition_statuses():
             await competition_service.update_competition_statuses(db)
             await db.commit()
         except Exception as e:
-            logger.error(f"Error in update_competition_statuses: {str(e)}", exc_info=True)
+            logger.error(f"Error in update_competition_statuses: {e!s}", exc_info=True)
             await db.rollback()
 
 
@@ -166,7 +171,7 @@ async def wrap_lock_expired_picks():
             await pick_service.lock_expired_picks(db)
             await db.commit()
         except Exception as e:
-            logger.error(f"Error in lock_expired_picks: {str(e)}", exc_info=True)
+            logger.error(f"Error in lock_expired_picks: {e!s}", exc_info=True)
             await db.rollback()
 
 
@@ -176,7 +181,7 @@ async def wrap_cleanup_pending_deletions():
             await user_service.cleanup_pending_deletions(db)
             await db.commit()
         except Exception as e:
-            logger.error(f"Error in cleanup_pending_deletions: {str(e)}", exc_info=True)
+            logger.error(f"Error in cleanup_pending_deletions: {e!s}", exc_info=True)
             await db.rollback()
 
 
@@ -190,7 +195,9 @@ async def sync_games_from_api():
         try:
             stmt = (
                 select(Competition)
-                .where(Competition.status.in_([CompetitionStatus.ACTIVE, CompetitionStatus.UPCOMING]))
+                .where(
+                    Competition.status.in_([CompetitionStatus.ACTIVE, CompetitionStatus.UPCOMING])
+                )
                 .options(selectinload(Competition.league))
             )
             result = await db.execute(stmt)
@@ -202,7 +209,9 @@ async def sync_games_from_api():
             comps_by_league = {}
             for comp in competitions:
                 league_name = comp.league.name
-                league_key = league_name.value if hasattr(league_name, 'value') else str(league_name)
+                league_key = (
+                    league_name.value if hasattr(league_name, "value") else str(league_name)
+                )
                 if league_key not in comps_by_league:
                     comps_by_league[league_key] = {"league": comp.league, "competitions": []}
                 comps_by_league[league_key]["competitions"].append(comp)
@@ -231,13 +240,17 @@ async def sync_games_from_api():
 
                     for game_data in api_games:
                         home_team = await _find_or_create_team(
-                            db, league.id, game_data.home_team,
+                            db,
+                            league.id,
+                            game_data.home_team,
                             game_data.home_team_external_id,
                             game_data.home_team_abbreviation,
                             existing_teams,
                         )
                         away_team = await _find_or_create_team(
-                            db, league.id, game_data.away_team,
+                            db,
+                            league.id,
+                            game_data.away_team,
                             game_data.away_team_external_id,
                             game_data.away_team_abbreviation,
                             existing_teams,
@@ -261,20 +274,24 @@ async def sync_games_from_api():
 
                         for comp in league_comps:
                             created, updated = await _sync_game_for_competition(
-                                db, comp, game_data, home_team, away_team,
+                                db,
+                                comp,
+                                game_data,
+                                home_team,
+                                away_team,
                             )
                             total_created += created
                             total_updated += updated
 
                 except Exception as e:
-                    logger.error(f"Error syncing games for {league_key}: {str(e)}")
+                    logger.error(f"Error syncing games for {league_key}: {e!s}")
                     continue
 
             await db.commit()
             logger.info(f"Game sync completed: {total_created} created, {total_updated} updated")
 
         except Exception as e:
-            logger.error(f"Error in sync_games_from_api: {str(e)}", exc_info=True)
+            logger.error(f"Error in sync_games_from_api: {e!s}", exc_info=True)
             await db.rollback()
 
 

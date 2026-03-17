@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
-from app.core.deps import get_current_user, get_current_global_admin
+
+from app.core.deps import get_current_global_admin, get_current_user
 from app.models.user import User
 from app.services.sports_api.sports_service import sports_service
 

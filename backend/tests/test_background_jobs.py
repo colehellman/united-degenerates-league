@@ -1,13 +1,31 @@
-import pytest
-import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from unittest.mock import patch
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
+import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.competition import Competition, CompetitionStatus
+from app.models.game import Game, GameStatus
+from app.models.participant import Participant
+from app.models.pick import FixedTeamSelection, Pick
+from app.models.user import AccountStatus, User
+from app.services.background_jobs import (
+    start_background_jobs,
+    stop_background_jobs,
+    sync_games_from_api,
+    update_game_scores,
+)
+from app.services.competition_service import (
+    _lock_fixed_team_selections,
+    update_competition_statuses,
+)
+from app.services.pick_service import lock_expired_picks
 from app.services.score_service import (
     recalculate_participant_stats as _recalculate_participant_stats,
+)
+from app.services.score_service import (
     score_picks_for_game as _score_picks_for_game,
 )
 from app.services.sync_service import (
@@ -15,28 +33,12 @@ from app.services.sync_service import (
     _sync_game_for_competition,
     sync_games_for_competition,
 )
-from app.services.competition_service import (
-    _lock_fixed_team_selections,
-    update_competition_statuses,
-)
-from app.services.pick_service import lock_expired_picks
 from app.services.user_service import cleanup_pending_deletions
-from app.services.background_jobs import (
-    update_game_scores,
-    sync_games_from_api,
-    start_background_jobs,
-    stop_background_jobs,
-)
-from app.models.user import User, AccountStatus
-from app.models.competition import Competition, CompetitionStatus
-from app.models.participant import Participant
-from app.models.pick import Pick, FixedTeamSelection
-from app.models.game import Game, GameStatus
-from app.models.league import Team
 
 
 def _make_session_patcher(db_session: AsyncSession):
     """Return a callable that acts like async_session() context manager, yielding the test session."""
+
     @asynccontextmanager
     async def _fake_ctx():
         yield db_session
@@ -50,7 +52,9 @@ def _make_session_patcher(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_recalculate_participant_stats(
-    db_session: AsyncSession, test_user: User, active_competition: Competition,
+    db_session: AsyncSession,
+    test_user: User,
+    active_competition: Competition,
     test_teams: list,
 ):
     """Test that participant stats are correctly recalculated."""
@@ -128,8 +132,11 @@ async def test_recalculate_participant_stats_no_picks(
 
 @pytest.mark.asyncio
 async def test_score_picks_for_game_correct_pick(
-    db_session: AsyncSession, test_user: User, active_competition: Competition,
-    test_game: Game, test_teams: list,
+    db_session: AsyncSession,
+    test_user: User,
+    active_competition: Competition,
+    test_game: Game,
+    test_teams: list,
 ):
     """Picks for the winning team are scored as correct (1 point)."""
     p = Participant(user_id=test_user.id, competition_id=active_competition.id)
@@ -157,8 +164,11 @@ async def test_score_picks_for_game_correct_pick(
 
 @pytest.mark.asyncio
 async def test_score_picks_for_game_incorrect_pick(
-    db_session: AsyncSession, test_user: User, active_competition: Competition,
-    test_game: Game, test_teams: list,
+    db_session: AsyncSession,
+    test_user: User,
+    active_competition: Competition,
+    test_game: Game,
+    test_teams: list,
 ):
     """Picks for the losing team are scored as incorrect (0 points)."""
     p = Participant(user_id=test_user.id, competition_id=active_competition.id)
@@ -186,8 +196,11 @@ async def test_score_picks_for_game_incorrect_pick(
 
 @pytest.mark.asyncio
 async def test_score_picks_for_game_tie(
-    db_session: AsyncSession, test_user: User, active_competition: Competition,
-    test_game: Game, test_teams: list,
+    db_session: AsyncSession,
+    test_user: User,
+    active_competition: Competition,
+    test_game: Game,
+    test_teams: list,
 ):
     """When game has no winner (tie), all picks get 0 points."""
     p = Participant(user_id=test_user.id, competition_id=active_competition.id)
@@ -245,9 +258,7 @@ async def test_find_or_create_team_from_cache(
 ):
     """_find_or_create_team returns cached team without a DB insert."""
     cache = {"team_a": test_teams[0]}
-    result = await _find_or_create_team(
-        db_session, test_league.id, "Team A", "team_a", "TA", cache
-    )
+    result = await _find_or_create_team(db_session, test_league.id, "Team A", "team_a", "TA", cache)
     assert result is test_teams[0]
 
 
@@ -285,8 +296,10 @@ async def test_sync_game_create(
 
 @pytest.mark.asyncio
 async def test_sync_game_update(
-    db_session: AsyncSession, active_competition: Competition,
-    test_game: Game, test_teams: list,
+    db_session: AsyncSession,
+    active_competition: Competition,
+    test_game: Game,
+    test_teams: list,
 ):
     """_sync_game_for_competition updates an existing game's score."""
     from app.services.sports_api.base import GameData
@@ -311,8 +324,11 @@ async def test_sync_game_update(
 
 @pytest.mark.asyncio
 async def test_sync_game_becomes_final_scores_picks(
-    db_session: AsyncSession, test_user: User, active_competition: Competition,
-    test_game: Game, test_teams: list,
+    db_session: AsyncSession,
+    test_user: User,
+    active_competition: Competition,
+    test_game: Game,
+    test_teams: list,
 ):
     """When a synced game becomes FINAL, picks are automatically scored."""
     from app.services.sports_api.base import GameData
@@ -414,9 +430,7 @@ async def test_lock_expired_picks_via_job(
 
 
 @pytest.mark.asyncio
-async def test_cleanup_pending_deletions_via_job(
-    db_session: AsyncSession, test_user: User
-):
+async def test_cleanup_pending_deletions_via_job(db_session: AsyncSession, test_user: User):
     """cleanup_pending_deletions anonymizes users past the 30-day grace period."""
     test_user.status = AccountStatus.PENDING_DELETION
     test_user.deletion_requested_at = datetime.utcnow() - timedelta(days=31)
@@ -446,7 +460,7 @@ async def test_update_competition_statuses_upcoming_to_active(
     db_session: AsyncSession, test_league, test_user: User
 ):
     """Competitions past start_date transition from UPCOMING to ACTIVE."""
-    from app.models.competition import Competition, CompetitionMode, Visibility, JoinType
+    from app.models.competition import Competition, CompetitionMode, JoinType, Visibility
 
     comp = Competition(
         name="Soon Active",
@@ -487,8 +501,9 @@ async def test_update_game_scores_updates_in_progress_game(
     db_session: AsyncSession, test_user: User, active_competition, test_game: Game, test_teams: list
 ):
     """update_game_scores updates scores for in-progress games from the API."""
-    from app.services.sports_api.base import GameData
     from unittest.mock import AsyncMock
+
+    from app.services.sports_api.base import GameData
 
     # Set game to in_progress
     test_game.status = GameStatus.IN_PROGRESS
@@ -510,7 +525,9 @@ async def test_update_game_scores_updates_in_progress_game(
             "app.services.background_jobs.sports_service.get_live_scores",
             new=AsyncMock(return_value=[mock_game_data]),
         ):
-            with patch("app.services.background_jobs.ScoreManager.publish_score_update", new=AsyncMock()):
+            with patch(
+                "app.services.background_jobs.ScoreManager.publish_score_update", new=AsyncMock()
+            ):
                 await update_game_scores()
 
     await db_session.refresh(test_game)
@@ -523,8 +540,9 @@ async def test_update_game_scores_scores_picks_on_final(
     db_session: AsyncSession, test_user: User, active_competition, test_game: Game, test_teams: list
 ):
     """update_game_scores scores picks when a game transitions to FINAL."""
-    from app.services.sports_api.base import GameData
     from unittest.mock import AsyncMock
+
+    from app.services.sports_api.base import GameData
 
     p = Participant(user_id=test_user.id, competition_id=active_competition.id)
     db_session.add(p)
@@ -554,7 +572,9 @@ async def test_update_game_scores_scores_picks_on_final(
             "app.services.background_jobs.sports_service.get_live_scores",
             new=AsyncMock(return_value=[mock_game_data]),
         ):
-            with patch("app.services.background_jobs.ScoreManager.publish_score_update", new=AsyncMock()):
+            with patch(
+                "app.services.background_jobs.ScoreManager.publish_score_update", new=AsyncMock()
+            ):
                 with patch("app.services.background_jobs.sports_service.redis_client", None):
                     await update_game_scores()
 
@@ -575,8 +595,9 @@ async def test_sync_games_from_api_creates_games(
     db_session: AsyncSession, test_user: User, active_competition, test_league
 ):
     """sync_games_from_api creates new games from ESPN data."""
-    from app.services.sports_api.base import GameData
     from unittest.mock import AsyncMock
+
+    from app.services.sports_api.base import GameData
 
     mock_game_data = GameData(
         external_id="espn_new_game",
@@ -611,7 +632,7 @@ async def test_update_competition_statuses_active_to_completed(
     db_session: AsyncSession, test_league, test_user: User, test_teams: list
 ):
     """Active competition with all games FINAL transitions to COMPLETED."""
-    from app.models.competition import Competition, CompetitionMode, Visibility, JoinType
+    from app.models.competition import Competition, CompetitionMode, JoinType, Visibility
 
     comp = Competition(
         name="Finishing Comp",
@@ -656,8 +677,9 @@ async def test_update_game_scores_tie_game(
     db_session: AsyncSession, test_user: User, active_competition, test_game: Game, test_teams: list
 ):
     """update_game_scores handles tie (no winner) correctly."""
-    from app.services.sports_api.base import GameData
     from unittest.mock import AsyncMock
+
+    from app.services.sports_api.base import GameData
 
     test_game.status = GameStatus.IN_PROGRESS
     await db_session.commit()
@@ -678,7 +700,9 @@ async def test_update_game_scores_tie_game(
             "app.services.background_jobs.sports_service.get_live_scores",
             new=AsyncMock(return_value=[score_data]),
         ):
-            with patch("app.services.background_jobs.ScoreManager.publish_score_update", new=AsyncMock()):
+            with patch(
+                "app.services.background_jobs.ScoreManager.publish_score_update", new=AsyncMock()
+            ):
                 await update_game_scores()
 
     await db_session.refresh(test_game)
@@ -700,7 +724,7 @@ async def test_update_competition_statuses_games_still_in_progress(
     db_session: AsyncSession, test_league, test_user: User, test_teams: list
 ):
     """Active comp past end_date but with in-progress games stays ACTIVE (debug branch)."""
-    from app.models.competition import Competition, CompetitionMode, Visibility, JoinType
+    from app.models.competition import Competition, CompetitionMode, JoinType, Visibility
 
     comp = Competition(
         name="Slow Comp",
@@ -761,8 +785,9 @@ async def test_update_game_scores_away_team_wins(
     db_session: AsyncSession, test_user: User, active_competition, test_game: Game, test_teams: list
 ):
     """update_game_scores sets away_team as winner when away_score > home_score."""
-    from app.services.sports_api.base import GameData
     from unittest.mock import AsyncMock
+
+    from app.services.sports_api.base import GameData
 
     test_game.status = GameStatus.IN_PROGRESS
     await db_session.commit()
@@ -783,7 +808,9 @@ async def test_update_game_scores_away_team_wins(
             "app.services.background_jobs.sports_service.get_live_scores",
             new=AsyncMock(return_value=[score_data]),
         ):
-            with patch("app.services.background_jobs.ScoreManager.publish_score_update", new=AsyncMock()):
+            with patch(
+                "app.services.background_jobs.ScoreManager.publish_score_update", new=AsyncMock()
+            ):
                 await update_game_scores()
 
     await db_session.refresh(test_game)
@@ -796,8 +823,9 @@ async def test_update_game_scores_game_not_in_api_response(
     db_session: AsyncSession, test_user: User, active_competition, test_game: Game, test_teams: list
 ):
     """update_game_scores skips games not returned by the API (continue branch)."""
-    from app.services.sports_api.base import GameData
     from unittest.mock import AsyncMock
+
+    from app.services.sports_api.base import GameData
 
     test_game.status = GameStatus.IN_PROGRESS
     await db_session.commit()
@@ -817,7 +845,9 @@ async def test_update_game_scores_game_not_in_api_response(
             "app.services.background_jobs.sports_service.get_live_scores",
             new=AsyncMock(return_value=[different_game]),
         ):
-            with patch("app.services.background_jobs.ScoreManager.publish_score_update", new=AsyncMock()):
+            with patch(
+                "app.services.background_jobs.ScoreManager.publish_score_update", new=AsyncMock()
+            ):
                 await update_game_scores()
 
     await db_session.refresh(test_game)
@@ -883,13 +913,13 @@ async def test_sync_game_for_competition_tie(
 
 def _make_failing_session(error=None):
     """Return a session factory whose session.execute always raises."""
-    from unittest.mock import AsyncMock, MagicMock
 
     exc = error or Exception("DB error")
 
     class _FailingSession:
         async def execute(self, *a, **kw):
             raise exc
+
         async def rollback(self):
             pass
 
@@ -945,12 +975,15 @@ def test_start_and_stop_background_jobs():
 # sync_games_for_competition
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_sync_games_for_competition_not_found(db_session: AsyncSession):
     """Returns a 'not found' message for a non-existent competition id."""
     session_patcher = _make_session_patcher(db_session)
     with patch("app.services.background_jobs.async_session", session_patcher):
-        result = await sync_games_for_competition(db_session, "00000000-0000-0000-0000-000000000000")
+        result = await sync_games_for_competition(
+            db_session, "00000000-0000-0000-0000-000000000000"
+        )
         await db_session.commit()
 
     assert result["created"] == 0
@@ -965,13 +998,16 @@ async def test_sync_games_for_competition_no_games_from_espn(
 ):
     """Returns a 'no games' message when ESPN returns an empty scoreboard."""
     from unittest.mock import AsyncMock
+
     session_patcher = _make_session_patcher(db_session)
-    with patch("app.services.background_jobs.async_session", session_patcher), \
-         patch(
-             # sync_games_for_competition loops get_schedule per date now
-             "app.services.background_jobs.sports_service.get_schedule",
-             new=AsyncMock(return_value=[]),
-         ):
+    with (
+        patch("app.services.background_jobs.async_session", session_patcher),
+        patch(
+            # sync_games_for_competition loops get_schedule per date now
+            "app.services.background_jobs.sports_service.get_schedule",
+            new=AsyncMock(return_value=[]),
+        ),
+    ):
         result = await sync_games_for_competition(db_session, str(active_competition.id))
         await db_session.commit()
 
@@ -987,8 +1023,9 @@ async def test_sync_games_for_competition_creates_games(
     test_teams: list,
 ):
     """sync_games_for_competition creates new games when ESPN returns data."""
-    from app.services.sports_api.base import GameData
     from unittest.mock import AsyncMock
+
+    from app.services.sports_api.base import GameData
 
     mock_game = GameData(
         external_id="sgfc_game_001",
@@ -1003,12 +1040,14 @@ async def test_sync_games_for_competition_creates_games(
     )
 
     session_patcher = _make_session_patcher(db_session)
-    with patch("app.services.background_jobs.async_session", session_patcher), \
-         patch(
-             # sync_games_for_competition now loops get_schedule per date
-             "app.services.background_jobs.sports_service.get_schedule",
-             new=AsyncMock(return_value=[mock_game]),
-         ):
+    with (
+        patch("app.services.background_jobs.async_session", session_patcher),
+        patch(
+            # sync_games_for_competition now loops get_schedule per date
+            "app.services.background_jobs.sports_service.get_schedule",
+            new=AsyncMock(return_value=[mock_game]),
+        ),
+    ):
         result = await sync_games_for_competition(db_session, str(active_competition.id))
         await db_session.commit()
 

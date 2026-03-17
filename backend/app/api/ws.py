@@ -6,7 +6,9 @@ data is public.
 """
 
 import logging
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
 from app.services.ws_manager import score_manager
 
 logger = logging.getLogger(__name__)

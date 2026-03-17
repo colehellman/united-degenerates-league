@@ -1,26 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
-from typing import Dict, List, Optional
-from datetime import datetime
 import logging
+from datetime import datetime
 
-from app.core.deps import get_db, get_current_user
-from app.models.user import User
-from app.models.pick import Pick, FixedTeamSelection
-from app.models.game import Game, GameStatus
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
+
+from app.core.deps import get_current_user, get_db
 from app.models.competition import Competition, CompetitionMode
+from app.models.game import Game
 from app.models.participant import Participant
+from app.models.pick import FixedTeamSelection, Pick
+from app.models.user import User
 from app.schemas.pick import (
-    PickCreate,
-    PickBatchCreate,
-    PickUpdate,
-    PickResponse,
-    FixedTeamSelectionCreate,
     FixedTeamSelectionBatchCreate,
     FixedTeamSelectionResponse,
+    PickBatchCreate,
+    PickResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,11 +25,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/{competition_id}/daily", response_model=List[PickResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{competition_id}/daily",
+    response_model=list[PickResponse],
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_daily_picks_batch(
     competition_id: str,
     pick_data: PickBatchCreate,
-    date: Optional[str] = Query(None, description="Local date (YYYY-MM-DD) to scope pick replacement"),
+    date: str | None = Query(None, description="Local date (YYYY-MM-DD) to scope pick replacement"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -48,9 +49,7 @@ async def create_daily_picks_batch(
     change a winner or swap an unstarted game without hitting a false limit.
     """
     # Verify competition exists and is Daily Picks mode
-    comp_result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    comp_result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = comp_result.scalar_one_or_none()
 
     if not competition or competition.mode != CompetitionMode.DAILY_PICKS:
@@ -111,9 +110,7 @@ async def create_daily_picks_batch(
             )
         )
     )
-    existing_by_game: Dict[str, Pick] = {
-        str(p.game_id): p for p in existing_result.scalars().all()
-    }
+    existing_by_game: dict[str, Pick] = {str(p.game_id): p for p in existing_result.scalars().all()}
 
     submitted_game_ids = {str(p.game_id) for p in pick_data.picks}
 
@@ -134,20 +131,20 @@ async def create_daily_picks_batch(
     # Limit check using post-operation totals.
     # Old logic: current_count + batch_size (counts updates as new — always wrong on re-submit).
     # New logic: locked_immutable + batch_size (the actual pick count after this operation).
-    if competition.max_picks_per_day is not None:
-        if (locked_not_in_batch + len(pick_data.picks)) > competition.max_picks_per_day:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Daily pick limit ({competition.max_picks_per_day}) exceeded.",
-            )
+    if (
+        competition.max_picks_per_day is not None
+        and (locked_not_in_batch + len(pick_data.picks)) > competition.max_picks_per_day
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Daily pick limit ({competition.max_picks_per_day}) exceeded.",
+        )
 
     # Pre-fetch all games in the batch
     game_ids = [pick_item.game_id for pick_item in pick_data.picks]
     games_by_id = {}
     if game_ids:
-        games_result = await db.execute(
-            select(Game).where(Game.id.in_(game_ids))
-        )
+        games_result = await db.execute(select(Game).where(Game.id.in_(game_ids)))
         for g in games_result.scalars().all():
             games_by_id[str(g.id)] = g
 
@@ -208,10 +205,10 @@ async def create_daily_picks_batch(
     return [PickResponse.model_validate(pick) for pick in created_picks]
 
 
-@router.get("/{competition_id}/my-picks", response_model=List[PickResponse])
+@router.get("/{competition_id}/my-picks", response_model=list[PickResponse])
 async def get_user_daily_picks(
     competition_id: str,
-    date: Optional[str] = Query(None, description="Filter by date (YYYY-MM-DD format)"),
+    date: str | None = Query(None, description="Filter by date (YYYY-MM-DD format)"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -239,7 +236,7 @@ async def get_user_daily_picks(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid date format. Use YYYY-MM-DD",
-            )
+            ) from None
 
     result = await db.execute(query)
     picks = result.scalars().all()
@@ -247,7 +244,11 @@ async def get_user_daily_picks(
     return [PickResponse.model_validate(pick) for pick in picks]
 
 
-@router.post("/{competition_id}/fixed-teams", response_model=List[FixedTeamSelectionResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{competition_id}/fixed-teams",
+    response_model=list[FixedTeamSelectionResponse],
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_fixed_team_selections_batch(
     competition_id: str,
     selection_data: FixedTeamSelectionBatchCreate,
@@ -256,9 +257,7 @@ async def create_fixed_team_selections_batch(
 ):
     """Create fixed team/golfer selections (batch)"""
     # Verify competition exists and is Fixed Teams mode
-    comp_result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    comp_result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = comp_result.scalar_one_or_none()
 
     if not competition or competition.mode != CompetitionMode.FIXED_TEAMS:
@@ -276,7 +275,8 @@ async def create_fixed_team_selections_batch(
 
     # Verify user is participant (lock row to prevent concurrent oversubmission)
     participant_result = await db.execute(
-        select(Participant).where(
+        select(Participant)
+        .where(
             and_(
                 Participant.competition_id == competition.id,
                 Participant.user_id == current_user.id,
@@ -301,7 +301,9 @@ async def create_fixed_team_selections_batch(
     )
     current_count = user_selections_count.scalar()
 
-    max_selections = competition.max_teams_per_participant or competition.max_golfers_per_participant
+    max_selections = (
+        competition.max_teams_per_participant or competition.max_golfers_per_participant
+    )
     if max_selections and (current_count + len(selection_data.selections)) > max_selections:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -362,11 +364,14 @@ async def create_fixed_team_selections_batch(
             f"competition {competition_id}: {e.orig}",
         )
         error_str = str(e.orig) if e.orig else str(e)
-        if "uq_fixed_selection_competition_team" in error_str or "uq_fixed_selection_competition_golfer" in error_str:
+        if (
+            "uq_fixed_selection_competition_team" in error_str
+            or "uq_fixed_selection_competition_golfer" in error_str
+        ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="One or more selections were already taken by another user",
-            )
+            ) from None
         raise
 
     # Refresh all selections
@@ -376,7 +381,9 @@ async def create_fixed_team_selections_batch(
     return [FixedTeamSelectionResponse.model_validate(sel) for sel in created_selections]
 
 
-@router.get("/{competition_id}/my-fixed-selections", response_model=List[FixedTeamSelectionResponse])
+@router.get(
+    "/{competition_id}/my-fixed-selections", response_model=list[FixedTeamSelectionResponse]
+)
 async def get_user_fixed_team_selections(
     competition_id: str,
     current_user: User = Depends(get_current_user),

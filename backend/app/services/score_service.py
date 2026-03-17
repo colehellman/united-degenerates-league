@@ -1,10 +1,13 @@
 import logging
-from sqlalchemy import select, and_, update
+
+from sqlalchemy import and_, select, update
+
 from app.models.game import Game
-from app.models.pick import Pick
 from app.models.participant import Participant
+from app.models.pick import Pick
 
 logger = logging.getLogger(__name__)
+
 
 async def score_picks_for_game(db, game: Game):
     """
@@ -39,24 +42,22 @@ async def score_picks_for_game(db, game: Game):
     logger.info(f"Scored {scored_count} picks for game {game.id}")
 
     # Recalculate participant aggregate stats
-    participant_keys = set((pick.user_id, pick.competition_id) for pick in picks)
+    participant_keys = {(pick.user_id, pick.competition_id) for pick in picks}
 
     for user_id, competition_id in participant_keys:
         await recalculate_participant_stats(db, user_id, competition_id)
+
 
 async def recalculate_participant_stats(db, user_id, competition_id):
     """
     Recalculate aggregate stats for a participant.
     """
     # Fetch all scored picks for this participant
-    stmt = (
-        select(Pick)
-        .where(
-            and_(
-                Pick.user_id == user_id,
-                Pick.competition_id == competition_id,
-                Pick.is_correct.isnot(None)
-            )
+    stmt = select(Pick).where(
+        and_(
+            Pick.user_id == user_id,
+            Pick.competition_id == competition_id,
+            Pick.is_correct.isnot(None),
         )
     )
     result = await db.execute(stmt)
@@ -81,12 +82,7 @@ async def recalculate_participant_stats(db, user_id, competition_id):
     # Update participant record
     stmt = (
         update(Participant)
-        .where(
-            and_(
-                Participant.user_id == user_id,
-                Participant.competition_id == competition_id
-            )
-        )
+        .where(and_(Participant.user_id == user_id, Participant.competition_id == competition_id))
         .values(
             total_points=total_points,
             total_wins=total_wins,

@@ -1,26 +1,36 @@
-import uuid
 import logging
+import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select
-from datetime import datetime
 from pydantic import BaseModel
-from typing import Optional
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.config import settings
-from app.core.limiter import limiter
 from app.core.deps import get_db
-from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token, verify_token
-from app.models.user import User, AccountStatus
-from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse
-from app.services.token_blacklist import blacklist_token, is_token_blacklisted, is_user_token_revoked
+from app.core.limiter import limiter
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    get_password_hash,
+    verify_password,
+    verify_token,
+)
+from app.models.user import AccountStatus, User
+from app.schemas.user import TokenResponse, UserCreate, UserLogin, UserResponse
+from app.services.token_blacklist import (
+    blacklist_token,
+    is_token_blacklisted,
+    is_user_token_revoked,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: Optional[str] = None
+    refresh_token: str | None = None
 
 
 router = APIRouter()
@@ -82,8 +92,11 @@ async def _record_failed_login(db: AsyncSession, user: User) -> None:
     user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
     if user.failed_login_attempts >= settings.AUTH_LOCKOUT_ATTEMPTS:
         from datetime import timedelta
+
         user.locked_until = datetime.utcnow() + timedelta(minutes=settings.AUTH_LOCKOUT_MINUTES)
-        logger.warning(f"Account locked for user {user.id} after {user.failed_login_attempts} failed attempts")
+        logger.warning(
+            f"Account locked for user {user.id} after {user.failed_login_attempts} failed attempts"
+        )
     await db.commit()
 
 
@@ -141,7 +154,7 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email or username already taken",
-        )
+        ) from None
     await db.refresh(new_user)
 
     # Create tokens
@@ -218,7 +231,7 @@ async def refresh_tokens(
     request: Request,
     response: Response,
     body: RefreshRequest = RefreshRequest(),
-    refresh_token_cookie: Optional[str] = Cookie(None, alias="refresh_token"),
+    refresh_token_cookie: str | None = Cookie(None, alias="refresh_token"),
     db: AsyncSession = Depends(get_db),
 ):
     """Exchange a valid refresh token for new access + refresh tokens.
@@ -296,7 +309,7 @@ async def refresh_tokens(
 @router.post("/logout")
 async def logout(
     response: Response,
-    refresh_token_cookie: Optional[str] = Cookie(None, alias="refresh_token"),
+    refresh_token_cookie: str | None = Cookie(None, alias="refresh_token"),
     body: RefreshRequest = RefreshRequest(),
 ):
     """Clear auth cookies and blacklist the refresh token server-side."""

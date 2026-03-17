@@ -13,19 +13,18 @@ Tests for admin endpoints that lack coverage:
 - POST /admin/sync-games
 """
 
-import pytest
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, patch
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from app.models.user import User, UserRole, AccountStatus
-from app.models.competition import Competition, CompetitionStatus
-from app.models.participant import Participant
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.audit_log import AuditAction, AuditLog
+from app.models.competition import Competition
 from app.models.game import Game, GameStatus
-from app.models.pick import Pick
-from app.models.audit_log import AuditLog, AuditAction
+from app.models.participant import Participant
+from app.models.user import User, UserRole
 from tests.conftest import _login, _make_global_admin
 
 pytestmark = pytest.mark.asyncio
@@ -34,6 +33,7 @@ pytestmark = pytest.mark.asyncio
 # ---------------------------------------------------------------------------
 # PATCH /admin/users/{id}/status
 # ---------------------------------------------------------------------------
+
 
 async def test_update_user_status_suspend(
     client: AsyncClient,
@@ -184,6 +184,7 @@ async def test_update_user_status_non_admin_forbidden(
 # PATCH /admin/users/{id}/role
 # ---------------------------------------------------------------------------
 
+
 async def test_update_user_role(
     client: AsyncClient,
     test_user: User,
@@ -241,6 +242,7 @@ async def test_update_user_role_not_found(
 # ---------------------------------------------------------------------------
 # POST /admin/games/{id}/correct-score
 # ---------------------------------------------------------------------------
+
 
 async def test_correct_game_score(
     client: AsyncClient,
@@ -415,6 +417,7 @@ async def test_correct_game_score_tie(
 # POST /admin/games/{id}/rescore
 # ---------------------------------------------------------------------------
 
+
 async def test_rescore_game(
     client: AsyncClient,
     test_user: User,
@@ -501,6 +504,7 @@ async def test_rescore_game_not_found(
 # POST /admin/competitions/{id}/winner
 # ---------------------------------------------------------------------------
 
+
 async def test_designate_winner(
     client: AsyncClient,
     test_user: User,
@@ -568,6 +572,7 @@ async def test_designate_winner_competition_not_found(
 # DELETE /admin/competitions/{id}/participants/{user_id}
 # ---------------------------------------------------------------------------
 
+
 async def test_remove_participant(
     client: AsyncClient,
     test_user: User,
@@ -632,6 +637,7 @@ async def test_remove_participant_creator_forbidden(
 # POST /admin/competitions/{id}/admins
 # ---------------------------------------------------------------------------
 
+
 async def test_add_competition_admin(
     client: AsyncClient,
     test_user: User,
@@ -680,6 +686,7 @@ async def test_add_competition_admin_user_not_found(
 
     # Use a valid UUID4 that doesn't match any existing user
     import uuid
+
     fake_user_id = str(uuid.uuid4())
     resp = await client.post(
         f"/api/admin/competitions/{active_competition.id}/admins",
@@ -693,6 +700,7 @@ async def test_add_competition_admin_user_not_found(
 # DELETE /admin/competitions/{id}/admins/{admin_user_id}
 # ---------------------------------------------------------------------------
 
+
 async def test_remove_competition_admin(
     client: AsyncClient,
     test_user: User,
@@ -702,7 +710,7 @@ async def test_remove_competition_admin(
 ):
     """Competition admin can remove another admin."""
     # First add second_user as admin
-    active_competition.league_admin_ids = active_competition.league_admin_ids + [second_user.id]
+    active_competition.league_admin_ids = [*active_competition.league_admin_ids, second_user.id]
     await db_session.commit()
 
     token = await _login(client)
@@ -754,6 +762,7 @@ async def test_remove_competition_admin_not_admin(
 # GET /admin/stats
 # ---------------------------------------------------------------------------
 
+
 async def test_platform_stats(
     client: AsyncClient,
     test_user: User,
@@ -797,6 +806,7 @@ async def test_platform_stats_non_admin_forbidden(
 # ---------------------------------------------------------------------------
 # GET /admin/competitions
 # ---------------------------------------------------------------------------
+
 
 async def test_list_all_competitions(
     client: AsyncClient,
@@ -857,6 +867,7 @@ async def test_list_all_competitions_non_admin_forbidden(
 # POST /admin/sync-games
 # ---------------------------------------------------------------------------
 
+
 async def test_force_sync_games_admin(
     client: AsyncClient,
     test_user: User,
@@ -892,6 +903,7 @@ async def test_force_sync_games_non_admin_forbidden(
 # Competition status change (admin endpoint, additional branches)
 # ---------------------------------------------------------------------------
 
+
 async def test_force_competition_status_not_found(
     client: AsyncClient,
     test_user: User,
@@ -913,6 +925,7 @@ async def test_force_competition_status_not_found(
 # Users.py coverage: duplicate username via PATCH /users/me
 # ---------------------------------------------------------------------------
 
+
 async def test_update_username_duplicate(
     client: AsyncClient,
     test_user: User,
@@ -933,6 +946,7 @@ async def test_update_username_duplicate(
 # ---------------------------------------------------------------------------
 # Competitions.py coverage: list competitions with filters
 # ---------------------------------------------------------------------------
+
 
 async def test_list_competitions_with_status_filter(
     client: AsyncClient,
@@ -989,6 +1003,7 @@ async def test_get_competition_games_invalid_date(
 # ---------------------------------------------------------------------------
 # Join request edge cases
 # ---------------------------------------------------------------------------
+
 
 async def test_join_request_not_found(
     client: AsyncClient,

@@ -13,27 +13,26 @@ Covers endpoints not exercised by test_critical_paths.py:
 Run with: pytest tests/test_api_coverage.py -v
 """
 
-import pytest
 from datetime import datetime, timedelta
+
+import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User, UserRole, AccountStatus
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.competition import (
-    Competition, CompetitionMode, CompetitionStatus, Visibility, JoinType,
+    Competition,
 )
-from app.models.league import League, LeagueName, Team
 from app.models.game import Game, GameStatus
-from app.models.participant import Participant, JoinRequest, JoinRequestStatus
-from app.models.pick import Pick, FixedTeamSelection
-from app.models.audit_log import AuditLog, AuditAction
-from app.core.security import get_password_hash
-
+from app.models.league import League, Team
+from app.models.participant import JoinRequest, JoinRequestStatus, Participant
+from app.models.pick import FixedTeamSelection, Pick
+from app.models.user import User
 from tests.conftest import _login, _login_full, _make_global_admin
 
-
 # ── Auth: Refresh & Logout ───────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_refresh_token_via_body(client: AsyncClient, test_user: User):
@@ -48,7 +47,9 @@ async def test_refresh_token_via_body(client: AsyncClient, test_user: User):
     assert "access_token" in data
     assert "refresh_token" in data
     # New access token should work
-    me = await client.get("/api/users/me", headers={"Authorization": f"Bearer {data['access_token']}"})
+    me = await client.get(
+        "/api/users/me", headers={"Authorization": f"Bearer {data['access_token']}"}
+    )
     assert me.status_code == 200
 
 
@@ -76,6 +77,7 @@ async def test_logout(client: AsyncClient, test_user: User):
 
 
 # ── Users: Profile ───────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_get_me(client: AsyncClient, test_user: User):
@@ -135,7 +137,9 @@ async def test_change_password(client: AsyncClient, test_user: User):
     assert resp.status_code == 200
 
     # Verify new password works
-    login_resp = await client.post("/api/auth/login", json={"email": "test@example.com", "password": "NewPass456!"})
+    login_resp = await client.post(
+        "/api/auth/login", json={"email": "test@example.com", "password": "NewPass456!"}
+    )
     assert login_resp.status_code == 200
 
 
@@ -162,7 +166,9 @@ async def test_account_deletion_and_cancel(client: AsyncClient, test_user: User)
     assert del_resp.json()["grace_period_days"] == 30
 
     # Cancel deletion
-    cancel_resp = await client.post("/api/users/me/cancel-deletion", headers={"Authorization": f"Bearer {token}"})
+    cancel_resp = await client.post(
+        "/api/users/me/cancel-deletion", headers={"Authorization": f"Bearer {token}"}
+    )
     assert cancel_resp.status_code == 200
 
 
@@ -170,14 +176,19 @@ async def test_account_deletion_and_cancel(client: AsyncClient, test_user: User)
 async def test_cancel_deletion_without_pending(client: AsyncClient, test_user: User):
     """POST cancel-deletion when no pending request returns 400."""
     token = await _login(client)
-    resp = await client.post("/api/users/me/cancel-deletion", headers={"Authorization": f"Bearer {token}"})
+    resp = await client.post(
+        "/api/users/me/cancel-deletion", headers={"Authorization": f"Bearer {token}"}
+    )
     assert resp.status_code == 400
 
 
 # ── Competitions: Get, Update, Delete ────────────────────────────────
 
+
 @pytest.mark.asyncio
-async def test_get_competition_by_id(client: AsyncClient, test_user: User, active_competition: Competition):
+async def test_get_competition_by_id(
+    client: AsyncClient, test_user: User, active_competition: Competition
+):
     """GET /competitions/{id} returns competition details."""
     token = await _login(client)
     resp = await client.get(
@@ -195,6 +206,7 @@ async def test_get_competition_not_found(client: AsyncClient, test_user: User):
     """GET /competitions/{bad_id} returns 404."""
     token = await _login(client)
     import uuid
+
     resp = await client.get(
         f"/api/competitions/{uuid.uuid4()}",
         headers={"Authorization": f"Bearer {token}"},
@@ -204,7 +216,10 @@ async def test_get_competition_not_found(client: AsyncClient, test_user: User):
 
 @pytest.mark.asyncio
 async def test_update_competition_as_global_admin(
-    client: AsyncClient, test_user: User, active_competition: Competition, db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    db_session: AsyncSession,
 ):
     """PATCH /competitions/{id} — global admins can update."""
     await _make_global_admin(db_session, test_user)
@@ -221,7 +236,10 @@ async def test_update_competition_as_global_admin(
 
 @pytest.mark.asyncio
 async def test_update_competition_forbidden(
-    client: AsyncClient, test_user: User, second_user: User, active_competition: Competition,
+    client: AsyncClient,
+    test_user: User,
+    second_user: User,
+    active_competition: Competition,
 ):
     """PATCH /competitions/{id} — non-admin gets 403."""
     token = await _login(client, email="second@example.com")
@@ -235,7 +253,10 @@ async def test_update_competition_forbidden(
 
 @pytest.mark.asyncio
 async def test_delete_competition_as_global_admin(
-    client: AsyncClient, test_user: User, active_competition: Competition, db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    db_session: AsyncSession,
 ):
     """DELETE /competitions/{id} — only global admins can delete."""
     await _make_global_admin(db_session, test_user)
@@ -250,7 +271,9 @@ async def test_delete_competition_as_global_admin(
 
 @pytest.mark.asyncio
 async def test_delete_competition_forbidden_for_regular_user(
-    client: AsyncClient, test_user: User, active_competition: Competition,
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
 ):
     """DELETE /competitions/{id} — regular user gets 403."""
     token = await _login(client)
@@ -263,10 +286,15 @@ async def test_delete_competition_forbidden_for_regular_user(
 
 # ── Competitions: Games ──────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_get_competition_games(
-    client: AsyncClient, test_user: User, active_competition: Competition,
-    test_teams: list[Team], participant: Participant, db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    test_teams: list[Team],
+    participant: Participant,
+    db_session: AsyncSession,
 ):
     """GET /competitions/{id}/games returns games list."""
     game = Game(
@@ -296,7 +324,10 @@ async def test_get_competition_games(
 
 @pytest.mark.asyncio
 async def test_get_competition_games_not_participant(
-    client: AsyncClient, test_user: User, second_user: User, active_competition: Competition,
+    client: AsyncClient,
+    test_user: User,
+    second_user: User,
+    active_competition: Competition,
 ):
     """GET /competitions/{id}/games — non-participant gets 403."""
     token = await _login(client, email="second@example.com")
@@ -309,10 +340,15 @@ async def test_get_competition_games_not_participant(
 
 # ── Picks: Get My Picks ─────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_get_my_daily_picks(
-    client: AsyncClient, test_user: User, active_competition: Competition,
-    test_teams: list[Team], participant: Participant, db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    test_teams: list[Team],
+    participant: Participant,
+    db_session: AsyncSession,
 ):
     """GET /picks/{id}/my-picks returns user's picks."""
     game = Game(
@@ -322,7 +358,8 @@ async def test_get_my_daily_picks(
         away_team_id=test_teams[1].id,
         scheduled_start_time=datetime.utcnow() + timedelta(hours=2),
         status=GameStatus.SCHEDULED,
-        venue_name="Arena", venue_city="City",
+        venue_name="Arena",
+        venue_city="City",
     )
     db_session.add(game)
     await db_session.commit()
@@ -350,7 +387,10 @@ async def test_get_my_daily_picks(
 
 @pytest.mark.asyncio
 async def test_get_my_daily_picks_empty(
-    client: AsyncClient, test_user: User, active_competition: Competition, participant: Participant,
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    participant: Participant,
 ):
     """GET /picks/{id}/my-picks with no picks returns empty list."""
     token = await _login(client)
@@ -364,10 +404,14 @@ async def test_get_my_daily_picks_empty(
 
 # ── Picks: Fixed Team Selections ─────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_create_fixed_team_selections(
-    client: AsyncClient, test_user: User, upcoming_fixed_comp: Competition,
-    test_teams: list[Team], db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    upcoming_fixed_comp: Competition,
+    test_teams: list[Team],
+    db_session: AsyncSession,
 ):
     """POST /picks/{id}/fixed-teams creates team selections."""
     # Add participant
@@ -393,8 +437,12 @@ async def test_create_fixed_team_selections(
 
 @pytest.mark.asyncio
 async def test_fixed_team_exclusivity(
-    client: AsyncClient, test_user: User, second_user: User,
-    upcoming_fixed_comp: Competition, test_teams: list[Team], db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    second_user: User,
+    upcoming_fixed_comp: Competition,
+    test_teams: list[Team],
+    db_session: AsyncSession,
 ):
     """Fixed team selections enforce exclusivity — same team can't be picked twice."""
     # Both users are participants
@@ -424,8 +472,11 @@ async def test_fixed_team_exclusivity(
 
 @pytest.mark.asyncio
 async def test_get_fixed_selections(
-    client: AsyncClient, test_user: User, upcoming_fixed_comp: Competition,
-    test_teams: list[Team], db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    upcoming_fixed_comp: Competition,
+    test_teams: list[Team],
+    db_session: AsyncSession,
 ):
     """GET /picks/{id}/my-fixed-selections returns user's fixed selections."""
     p = Participant(user_id=test_user.id, competition_id=upcoming_fixed_comp.id)
@@ -449,10 +500,14 @@ async def test_get_fixed_selections(
 
 # ── Admin: Join Requests ─────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_join_requires_approval_creates_request(
-    client: AsyncClient, test_user: User, second_user: User,
-    approval_competition: Competition, db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    second_user: User,
+    approval_competition: Competition,
+    db_session: AsyncSession,
 ):
     """POST /competitions/{id}/join on requires_approval comp creates a JoinRequest."""
     token = await _login(client, email="second@example.com")
@@ -468,8 +523,11 @@ async def test_join_requires_approval_creates_request(
 
 @pytest.mark.asyncio
 async def test_admin_approve_join_request(
-    client: AsyncClient, test_user: User, second_user: User,
-    approval_competition: Competition, db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    second_user: User,
+    approval_competition: Competition,
+    db_session: AsyncSession,
 ):
     """Global admin can approve a join request."""
     await _make_global_admin(db_session, test_user)
@@ -509,8 +567,11 @@ async def test_admin_approve_join_request(
 
 @pytest.mark.asyncio
 async def test_admin_reject_join_request(
-    client: AsyncClient, test_user: User, second_user: User,
-    approval_competition: Competition, db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    second_user: User,
+    approval_competition: Competition,
+    db_session: AsyncSession,
 ):
     """Global admin can reject a join request."""
     await _make_global_admin(db_session, test_user)
@@ -543,8 +604,11 @@ async def test_admin_reject_join_request(
 
 @pytest.mark.asyncio
 async def test_list_join_requests_as_global_admin(
-    client: AsyncClient, test_user: User, second_user: User,
-    approval_competition: Competition, db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    second_user: User,
+    approval_competition: Competition,
+    db_session: AsyncSession,
 ):
     """GET /admin/join-requests/{comp_id} as global admin returns requests."""
     await _make_global_admin(db_session, test_user)
@@ -570,7 +634,9 @@ async def test_list_join_requests_as_global_admin(
 
 @pytest.mark.asyncio
 async def test_list_join_requests_forbidden_for_non_admin(
-    client: AsyncClient, test_user: User, second_user: User,
+    client: AsyncClient,
+    test_user: User,
+    second_user: User,
     approval_competition: Competition,
 ):
     """GET /admin/join-requests/{comp_id} as non-admin returns 403.
@@ -591,9 +657,12 @@ async def test_list_join_requests_forbidden_for_non_admin(
 
 # ── Admin: Audit Logs ────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_audit_logs_as_global_admin(
-    client: AsyncClient, test_user: User, db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    db_session: AsyncSession,
 ):
     """GET /admin/audit-logs as global admin returns logs."""
     await _make_global_admin(db_session, test_user)
@@ -619,6 +688,7 @@ async def test_audit_logs_as_global_admin(
 
 # ── Leagues ──────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_list_leagues(client: AsyncClient, test_user: User, test_league: League):
     """GET /leagues returns all leagues."""
@@ -639,6 +709,7 @@ async def test_list_leagues_unauthenticated(client: AsyncClient):
 
 
 # ── Health ───────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_health_api_status(client: AsyncClient, test_user: User):
@@ -661,7 +732,9 @@ async def test_reset_circuit_breakers_forbidden(client: AsyncClient, test_user: 
 
 @pytest.mark.asyncio
 async def test_reset_circuit_breakers_as_admin(
-    client: AsyncClient, test_user: User, db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    db_session: AsyncSession,
 ):
     """POST /health/reset-circuit-breakers as global admin succeeds."""
     await _make_global_admin(db_session, test_user)
@@ -674,6 +747,7 @@ async def test_reset_circuit_breakers_as_admin(
 
 
 # ── Registration Edge Cases ──────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_register_duplicate_email(client: AsyncClient, test_user: User):
@@ -709,10 +783,15 @@ async def test_register_weak_password(client: AsyncClient):
 
 # ── Update pick (idempotent) ─────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_update_existing_pick(
-    client: AsyncClient, test_user: User, active_competition: Competition,
-    test_teams: list[Team], participant: Participant, db_session: AsyncSession,
+    client: AsyncClient,
+    test_user: User,
+    active_competition: Competition,
+    test_teams: list[Team],
+    participant: Participant,
+    db_session: AsyncSession,
 ):
     """Re-submitting a pick for the same game updates it rather than creating a duplicate."""
     game = Game(
@@ -722,7 +801,8 @@ async def test_update_existing_pick(
         away_team_id=test_teams[1].id,
         scheduled_start_time=datetime.utcnow() + timedelta(hours=2),
         status=GameStatus.SCHEDULED,
-        venue_name="Arena", venue_city="City",
+        venue_name="Arena",
+        venue_city="City",
     )
     db_session.add(game)
     await db_session.commit()
@@ -734,7 +814,9 @@ async def test_update_existing_pick(
     r1 = await client.post(
         f"/api/picks/{active_competition.id}/daily",
         headers={"Authorization": f"Bearer {token}"},
-        json={"picks": [{"game_id": str(game.id), "predicted_winner_team_id": str(test_teams[0].id)}]},
+        json={
+            "picks": [{"game_id": str(game.id), "predicted_winner_team_id": str(test_teams[0].id)}]
+        },
     )
     assert r1.status_code == 201
 
@@ -742,7 +824,9 @@ async def test_update_existing_pick(
     r2 = await client.post(
         f"/api/picks/{active_competition.id}/daily",
         headers={"Authorization": f"Bearer {token}"},
-        json={"picks": [{"game_id": str(game.id), "predicted_winner_team_id": str(test_teams[1].id)}]},
+        json={
+            "picks": [{"game_id": str(game.id), "predicted_winner_team_id": str(test_teams[1].id)}]
+        },
     )
     assert r2.status_code == 201
     assert r2.json()[0]["predicted_winner_team_id"] == str(test_teams[1].id)
@@ -830,7 +914,8 @@ async def test_update_picks_winner_at_max_limit(
         away_team_id=test_teams[1].id,
         scheduled_start_time=datetime.utcnow() + timedelta(hours=3),
         status=GameStatus.SCHEDULED,
-        venue_name="Arena", venue_city="City",
+        venue_name="Arena",
+        venue_city="City",
     )
     game2 = Game(
         competition_id=active_competition.id,
@@ -839,7 +924,8 @@ async def test_update_picks_winner_at_max_limit(
         away_team_id=test_teams[1].id,
         scheduled_start_time=datetime.utcnow() + timedelta(hours=5),
         status=GameStatus.SCHEDULED,
-        venue_name="Arena", venue_city="City",
+        venue_name="Arena",
+        venue_city="City",
     )
     db_session.add_all([game1, game2])
     await db_session.commit()
@@ -910,7 +996,8 @@ async def test_swap_game_pick_at_max_limit(
         away_team_id=test_teams[1].id,
         scheduled_start_time=datetime.utcnow() + timedelta(hours=3),
         status=GameStatus.SCHEDULED,
-        venue_name="Arena", venue_city="City",
+        venue_name="Arena",
+        venue_city="City",
     )
     game2 = Game(
         competition_id=active_competition.id,
@@ -919,7 +1006,8 @@ async def test_swap_game_pick_at_max_limit(
         away_team_id=test_teams[1].id,
         scheduled_start_time=datetime.utcnow() + timedelta(hours=5),
         status=GameStatus.SCHEDULED,
-        venue_name="Arena", venue_city="City",
+        venue_name="Arena",
+        venue_city="City",
     )
     game3 = Game(
         competition_id=active_competition.id,
@@ -928,7 +1016,8 @@ async def test_swap_game_pick_at_max_limit(
         away_team_id=test_teams[1].id,
         scheduled_start_time=datetime.utcnow() + timedelta(hours=7),
         status=GameStatus.SCHEDULED,
-        venue_name="Arena", venue_city="City",
+        venue_name="Arena",
+        venue_city="City",
     )
     db_session.add_all([game1, game2, game3])
     await db_session.commit()
@@ -999,7 +1088,8 @@ async def test_picks_invalid_date_falls_back_to_today(
         away_team_id=test_teams[1].id,
         scheduled_start_time=datetime.utcnow() + timedelta(hours=3),
         status=GameStatus.SCHEDULED,
-        venue_name="Arena", venue_city="City",
+        venue_name="Arena",
+        venue_city="City",
     )
     db_session.add(game)
     await db_session.commit()
@@ -1013,7 +1103,9 @@ async def test_picks_invalid_date_falls_back_to_today(
         f"/api/picks/{active_competition.id}/daily",
         headers={"Authorization": f"Bearer {token}"},
         params={"date": "not-a-date"},
-        json={"picks": [{"game_id": str(game.id), "predicted_winner_team_id": str(test_teams[0].id)}]},
+        json={
+            "picks": [{"game_id": str(game.id), "predicted_winner_team_id": str(test_teams[0].id)}]
+        },
     )
     assert resp.status_code == 201
 
@@ -1043,7 +1135,8 @@ async def test_picks_started_game_counted_as_locked(
         # In the past → already started → locked
         scheduled_start_time=datetime.utcnow() - timedelta(hours=1),
         status=GameStatus.IN_PROGRESS,
-        venue_name="Arena", venue_city="City",
+        venue_name="Arena",
+        venue_city="City",
     )
     future_game = Game(
         competition_id=active_competition.id,
@@ -1052,7 +1145,8 @@ async def test_picks_started_game_counted_as_locked(
         away_team_id=test_teams[1].id,
         scheduled_start_time=datetime.utcnow() + timedelta(hours=3),
         status=GameStatus.SCHEDULED,
-        venue_name="Arena", venue_city="City",
+        venue_name="Arena",
+        venue_city="City",
     )
     db_session.add_all([started_game, future_game])
     await db_session.commit()
@@ -1079,7 +1173,11 @@ async def test_picks_started_game_counted_as_locked(
         f"/api/picks/{active_competition.id}/daily",
         headers={"Authorization": f"Bearer {token}"},
         params={"date": date_str},
-        json={"picks": [{"game_id": str(future_game.id), "predicted_winner_team_id": str(test_teams[1].id)}]},
+        json={
+            "picks": [
+                {"game_id": str(future_game.id), "predicted_winner_team_id": str(test_teams[1].id)}
+            ]
+        },
     )
     assert resp.status_code == 201
 

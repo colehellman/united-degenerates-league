@@ -1,10 +1,13 @@
 import logging
 from datetime import datetime
-from sqlalchemy import select, and_, update
+
+from sqlalchemy import and_, select, update
+
 from app.models.game import Game, GameStatus
 from app.models.pick import Pick
 
 logger = logging.getLogger(__name__)
+
 
 async def lock_expired_picks(db):
     """
@@ -14,13 +17,10 @@ async def lock_expired_picks(db):
     now = datetime.utcnow()
 
     # Find games that have started but have unlocked picks
-    stmt = (
-        select(Game)
-        .where(
-            and_(
-                Game.scheduled_start_time <= now,
-                Game.status.in_([GameStatus.SCHEDULED, GameStatus.IN_PROGRESS])
-            )
+    stmt = select(Game).where(
+        and_(
+            Game.scheduled_start_time <= now,
+            Game.status.in_([GameStatus.SCHEDULED, GameStatus.IN_PROGRESS]),
         )
     )
     result = await db.execute(stmt)
@@ -35,16 +35,8 @@ async def lock_expired_picks(db):
     # Lock all unlocked picks for these games
     stmt = (
         update(Pick)
-        .where(
-            and_(
-                Pick.game_id.in_(game_ids),
-                Pick.is_locked.is_(False)
-            )
-        )
-        .values(
-            is_locked=True,
-            locked_at=now
-        )
+        .where(and_(Pick.game_id.in_(game_ids), Pick.is_locked.is_(False)))
+        .values(is_locked=True, locked_at=now)
     )
     result = await db.execute(stmt)
     locked_count = result.rowcount

@@ -1,12 +1,13 @@
-from pydantic import BaseModel, Field, UUID4, field_validator
-from datetime import datetime, timezone, timedelta
-from typing import Optional, List
-from app.models.competition import CompetitionMode, CompetitionStatus, Visibility, JoinType
+from datetime import UTC, datetime
+
+from pydantic import UUID4, BaseModel, Field, field_validator
+
+from app.models.competition import CompetitionMode, CompetitionStatus, JoinType, Visibility
 
 
 class CompetitionBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = None
+    description: str | None = None
     mode: CompetitionMode
     league_id: UUID4
     start_date: datetime
@@ -22,15 +23,16 @@ class CompetitionBase(BaseModel):
         (from datetime.utcnow defaults on created_at/updated_at).
         """
         if v.tzinfo is not None:
-            v = v.astimezone(timezone.utc).replace(tzinfo=None)
+            v = v.astimezone(UTC).replace(tzinfo=None)
         return v
+
     display_timezone: str = "UTC"
     visibility: Visibility = Visibility.PRIVATE
     join_type: JoinType = JoinType.REQUIRES_APPROVAL
-    max_participants: Optional[int] = None
-    max_picks_per_day: Optional[int] = None
-    max_teams_per_participant: Optional[int] = None
-    max_golfers_per_participant: Optional[int] = None
+    max_participants: int | None = None
+    max_picks_per_day: int | None = None
+    max_teams_per_participant: int | None = None
+    max_golfers_per_participant: int | None = None
 
 
 class CompetitionCreate(CompetitionBase):
@@ -49,23 +51,24 @@ class CompetitionCreate(CompetitionBase):
 
 
 class CompetitionUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    description: Optional[str] = None
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
 
     @field_validator("start_date", "end_date", mode="after")
     @classmethod
-    def strip_timezone(cls, v: Optional[datetime]) -> Optional[datetime]:
+    def strip_timezone(cls, v: datetime | None) -> datetime | None:
         """Same naive-UTC normalization as CompetitionBase."""
         if v is not None and v.tzinfo is not None:
-            v = v.astimezone(timezone.utc).replace(tzinfo=None)
+            v = v.astimezone(UTC).replace(tzinfo=None)
         return v
-    display_timezone: Optional[str] = None
-    visibility: Optional[Visibility] = None
-    join_type: Optional[JoinType] = None
-    max_participants: Optional[int] = None
-    max_picks_per_day: Optional[int] = None
+
+    display_timezone: str | None = None
+    visibility: Visibility | None = None
+    join_type: JoinType | None = None
+    max_participants: int | None = None
+    max_picks_per_day: int | None = None
     # status is intentionally excluded — competition lifecycle transitions
     # are managed by background jobs only (UPCOMING → ACTIVE → COMPLETED).
     # Allowing admins to set status directly would bypass the intended flow.
@@ -75,13 +78,13 @@ class CompetitionResponse(CompetitionBase):
     id: UUID4
     status: CompetitionStatus
     creator_id: UUID4
-    league_admin_ids: List[UUID4]
-    winner_user_id: Optional[UUID4] = None
+    league_admin_ids: list[UUID4]
+    winner_user_id: UUID4 | None = None
     created_at: datetime
     updated_at: datetime
-    participant_count: Optional[int] = None
-    user_is_participant: Optional[bool] = None
-    user_is_admin: Optional[bool] = None
+    participant_count: int | None = None
+    user_is_participant: bool | None = None
+    user_is_admin: bool | None = None
 
     class Config:
         from_attributes = True
@@ -97,7 +100,7 @@ class CompetitionListResponse(BaseModel):
     end_date: datetime
     visibility: Visibility
     participant_count: int
-    max_participants: Optional[int] = None
+    max_participants: int | None = None
     user_is_participant: bool
 
     class Config:

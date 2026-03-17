@@ -1,9 +1,10 @@
-import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
-from app.services.sports_api.espn_client import ESPNAPIClient
+import pytest
+
 from app.services.sports_api.base import GameData
+from app.services.sports_api.espn_client import ESPNAPIClient
 
 
 @pytest.fixture
@@ -99,7 +100,11 @@ async def test_get_live_scores_success(client: ESPNAPIClient):
                             },
                             {
                                 "homeAway": "away",
-                                "team": {"id": "20", "displayName": "Raiders", "abbreviation": "LV"},
+                                "team": {
+                                    "id": "20",
+                                    "displayName": "Raiders",
+                                    "abbreviation": "LV",
+                                },
                                 "score": "10",
                             },
                         ]
@@ -191,7 +196,16 @@ def test_parse_event_insufficient_competitors_returns_none(client: ESPNAPIClient
     """_parse_event returns None when fewer than 2 competitors."""
     event = {
         "id": "x",
-        "competitions": [{"competitors": [{"homeAway": "home", "team": {"id": "1", "displayName": "A", "abbreviation": "A"}}]}],
+        "competitions": [
+            {
+                "competitors": [
+                    {
+                        "homeAway": "home",
+                        "team": {"id": "1", "displayName": "A", "abbreviation": "A"},
+                    }
+                ]
+            }
+        ],
     }
     assert client._parse_event(event) is None
 
@@ -205,8 +219,14 @@ def test_parse_event_missing_home_team_returns_none(client: ESPNAPIClient):
         "competitions": [
             {
                 "competitors": [
-                    {"homeAway": "away", "team": {"id": "1", "displayName": "A", "abbreviation": "A"}},
-                    {"homeAway": "away", "team": {"id": "2", "displayName": "B", "abbreviation": "B"}},
+                    {
+                        "homeAway": "away",
+                        "team": {"id": "1", "displayName": "A", "abbreviation": "A"},
+                    },
+                    {
+                        "homeAway": "away",
+                        "team": {"id": "2", "displayName": "B", "abbreviation": "B"},
+                    },
                 ]
             }
         ],
@@ -339,4 +359,3 @@ def test_parse_event_with_away_favorite_odds(client: ESPNAPIClient):
     assert result is not None
     # Away favored by 3.5 (-3.5) means Home spread is +3.5
     assert result.spread == 3.5
-

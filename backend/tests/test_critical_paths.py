@@ -11,22 +11,30 @@ These tests cover the most important user flows:
 Run with: pytest tests/test_critical_paths.py -v
 """
 
-import pytest
 from datetime import datetime, timedelta
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from app.models.user import User, UserRole, AccountStatus
-from app.models.competition import Competition, CompetitionMode, CompetitionStatus, Visibility, JoinType
-from app.models.league import League, LeagueName, Team
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import get_password_hash
+from app.models.competition import (
+    Competition,
+    CompetitionMode,
+    CompetitionStatus,
+    JoinType,
+    Visibility,
+)
 from app.models.game import Game, GameStatus
+from app.models.league import League, Team
 from app.models.participant import Participant
 from app.models.pick import Pick
-from app.core.security import get_password_hash
+from app.models.user import AccountStatus, User, UserRole
 from tests.conftest import _login
 
 # ── Authentication Tests ─────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_user_registration(client: AsyncClient):
@@ -37,7 +45,7 @@ async def test_user_registration(client: AsyncClient):
             "email": "newuser@example.com",
             "username": "newuser",
             "password": "securePassword123!",
-        }
+        },
     )
     assert response.status_code == 201
     data = response.json()
@@ -55,7 +63,7 @@ async def test_user_login(client: AsyncClient, test_user: User):
         json={
             "email": "test@example.com",
             "password": "Password123",
-        }
+        },
     )
     assert response.status_code == 200
     data = response.json()
@@ -72,7 +80,7 @@ async def test_login_invalid_credentials(client: AsyncClient, test_user: User):
         json={
             "email": "test@example.com",
             "password": "wrongpassword",
-        }
+        },
     )
     assert response.status_code == 401
 
@@ -129,15 +137,15 @@ async def test_refresh_token_via_cookie(client: AsyncClient, test_user: User):
 
 # ── Competition Tests ────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
-async def test_list_competitions(client: AsyncClient, test_user: User, active_competition: Competition):
+async def test_list_competitions(
+    client: AsyncClient, test_user: User, active_competition: Competition
+):
     """Test listing competitions"""
     token = await _login(client)
 
-    response = await client.get(
-        "/api/competitions",
-        headers={"Authorization": f"Bearer {token}"}
-    )
+    response = await client.get("/api/competitions", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
     assert len(data) > 0
@@ -145,13 +153,15 @@ async def test_list_competitions(client: AsyncClient, test_user: User, active_co
 
 
 @pytest.mark.asyncio
-async def test_join_competition(client: AsyncClient, test_user: User, active_competition: Competition, db_session: AsyncSession):
+async def test_join_competition(
+    client: AsyncClient, test_user: User, active_competition: Competition, db_session: AsyncSession
+):
     """Test joining a competition"""
     token = await _login(client)
 
     response = await client.post(
         f"/api/competitions/{active_competition.id}/join",
-        headers={"Authorization": f"Bearer {token}"}
+        headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code in [200, 201]
 
@@ -168,6 +178,7 @@ async def test_join_competition(client: AsyncClient, test_user: User, active_com
 
 # ── Pick Submission Tests ────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_submit_daily_pick(
     client: AsyncClient,
@@ -175,7 +186,7 @@ async def test_submit_daily_pick(
     active_competition: Competition,
     test_game: Game,
     test_teams: list[Team],
-    db_session: AsyncSession
+    db_session: AsyncSession,
 ):
     """Test submitting a daily pick"""
     # Create participant first
@@ -198,7 +209,7 @@ async def test_submit_daily_pick(
                     "predicted_winner_team_id": str(test_teams[0].id),
                 }
             ]
-        }
+        },
     )
     assert response.status_code == 201
     data = response.json()
@@ -214,7 +225,7 @@ async def test_cannot_submit_pick_after_game_starts(
     test_user: User,
     active_competition: Competition,
     test_teams: list[Team],
-    db_session: AsyncSession
+    db_session: AsyncSession,
 ):
     """Test that picks cannot be submitted after game starts"""
     # Create participant
@@ -251,7 +262,7 @@ async def test_cannot_submit_pick_after_game_starts(
                     "predicted_winner_team_id": str(test_teams[0].id),
                 }
             ]
-        }
+        },
     )
     assert response.status_code == 400
     assert "already started" in response.json()["detail"].lower()
@@ -259,8 +270,14 @@ async def test_cannot_submit_pick_after_game_starts(
 
 # ── Pick Locking Tests ───────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
-async def test_pick_locking(db_session: AsyncSession, test_user: User, active_competition: Competition, test_teams: list[Team]):
+async def test_pick_locking(
+    db_session: AsyncSession,
+    test_user: User,
+    active_competition: Competition,
+    test_teams: list[Team],
+):
     """Test that picks are locked when game starts"""
     # Create participant
     participant = Participant(
@@ -300,6 +317,7 @@ async def test_pick_locking(db_session: AsyncSession, test_user: User, active_co
 
     # Simulate background job locking picks
     from app.services.pick_service import lock_expired_picks
+
     await lock_expired_picks(db_session)
 
     # Refresh pick — it must be locked since the game start time has passed
@@ -309,8 +327,14 @@ async def test_pick_locking(db_session: AsyncSession, test_user: User, active_co
 
 # ── Game Scoring Tests ───────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
-async def test_pick_scoring(db_session: AsyncSession, test_user: User, active_competition: Competition, test_teams: list[Team]):
+async def test_pick_scoring(
+    db_session: AsyncSession,
+    test_user: User,
+    active_competition: Competition,
+    test_teams: list[Team],
+):
     """Test that picks are scored correctly when game finishes"""
     # Create participant
     participant = Participant(
@@ -352,6 +376,7 @@ async def test_pick_scoring(db_session: AsyncSession, test_user: User, active_co
 
     # Simulate background job scoring picks
     from app.services.score_service import score_picks_for_game
+
     await score_picks_for_game(db_session, game)
 
     # Refresh pick
@@ -371,12 +396,10 @@ async def test_pick_scoring(db_session: AsyncSession, test_user: User, active_co
 
 # ── Leaderboard Tests ────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_leaderboard_calculation(
-    client: AsyncClient,
-    test_user: User,
-    active_competition: Competition,
-    db_session: AsyncSession
+    client: AsyncClient, test_user: User, active_competition: Competition, db_session: AsyncSession
 ):
     """Test leaderboard calculation"""
     # Create participant with some stats (use actual Participant model fields)
@@ -394,8 +417,7 @@ async def test_leaderboard_calculation(
     token = await _login(client)
 
     response = await client.get(
-        f"/api/leaderboards/{active_competition.id}",
-        headers={"Authorization": f"Bearer {token}"}
+        f"/api/leaderboards/{active_competition.id}", headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 200
     data = response.json()
@@ -411,8 +433,11 @@ async def test_leaderboard_calculation(
 
 # ── Competition Status Transition Tests ──────────────────────────────
 
+
 @pytest.mark.asyncio
-async def test_competition_status_transition(db_session: AsyncSession, test_user: User, test_league: League):
+async def test_competition_status_transition(
+    db_session: AsyncSession, test_user: User, test_league: League
+):
     """Test that competitions transition from UPCOMING to ACTIVE"""
     # Create upcoming competition that should become active
     competition = Competition(
@@ -438,6 +463,7 @@ async def test_competition_status_transition(db_session: AsyncSession, test_user
 
     # Simulate background job updating statuses
     from app.services.competition_service import update_competition_statuses
+
     await update_competition_statuses(db_session)
 
     # Refresh competition
@@ -448,6 +474,7 @@ async def test_competition_status_transition(db_session: AsyncSession, test_user
 
 
 # ── Competition Creation Tests ──────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_create_competition(client: AsyncClient, test_user: User, test_league: League):
@@ -471,7 +498,7 @@ async def test_create_competition(client: AsyncClient, test_user: User, test_lea
             "end_date": (datetime.utcnow() + timedelta(days=7)).isoformat(),
             "visibility": "public",
             "join_type": "open",
-        }
+        },
     )
     assert response.status_code == 201, f"Expected 201, got {response.status_code}: {response.text}"
 
@@ -485,7 +512,9 @@ async def test_create_competition(client: AsyncClient, test_user: User, test_lea
 
 
 @pytest.mark.asyncio
-async def test_create_competition_with_all_options(client: AsyncClient, test_user: User, test_league: League):
+async def test_create_competition_with_all_options(
+    client: AsyncClient, test_user: User, test_league: League
+):
     """Test creating a competition with every optional field set."""
     token = await _login(client)
 
@@ -504,7 +533,7 @@ async def test_create_competition_with_all_options(client: AsyncClient, test_use
             "join_type": "requires_approval",
             "max_participants": 20,
             "max_picks_per_day": 10,
-        }
+        },
     )
     assert response.status_code == 201, f"Expected 201, got {response.status_code}: {response.text}"
 
@@ -516,7 +545,9 @@ async def test_create_competition_with_all_options(client: AsyncClient, test_use
 
 
 @pytest.mark.asyncio
-async def test_create_competition_tz_aware_dates(client: AsyncClient, test_user: User, test_league: League):
+async def test_create_competition_tz_aware_dates(
+    client: AsyncClient, test_user: User, test_league: League
+):
     """Test that ISO dates with 'Z' suffix (tz-aware) don't crash asyncpg.
 
     Browsers send dates like '2026-03-10T00:00:00.000Z' but the DB uses
@@ -540,13 +571,15 @@ async def test_create_competition_tz_aware_dates(client: AsyncClient, test_user:
             "end_date": end,
             "visibility": "public",
             "join_type": "open",
-        }
+        },
     )
     assert response.status_code == 201, f"Expected 201, got {response.status_code}: {response.text}"
 
 
 @pytest.mark.asyncio
-async def test_create_competition_invalid_dates(client: AsyncClient, test_user: User, test_league: League):
+async def test_create_competition_invalid_dates(
+    client: AsyncClient, test_user: User, test_league: League
+):
     """Test that end_date before start_date is rejected."""
     token = await _login(client)
 
@@ -561,12 +594,13 @@ async def test_create_competition_invalid_dates(client: AsyncClient, test_user: 
             "end_date": (datetime.utcnow() + timedelta(days=1)).isoformat(),
             "visibility": "public",
             "join_type": "open",
-        }
+        },
     )
     assert response.status_code == 400
 
 
 # ── Account Deletion Tests ───────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_cleanup_pending_deletions(db_session: AsyncSession):
@@ -599,6 +633,7 @@ async def test_cleanup_pending_deletions(db_session: AsyncSession):
     await db_session.refresh(recent_user)
 
     from app.services.user_service import cleanup_pending_deletions
+
     await cleanup_pending_deletions(db_session)
     await db_session.commit()
 
@@ -618,4 +653,5 @@ async def test_cleanup_pending_deletions(db_session: AsyncSession):
 if __name__ == "__main__":
     # Run tests with: python -m pytest backend/tests/test_critical_paths.py -v
     import sys
+
     sys.exit(pytest.main([__file__, "-v"]))

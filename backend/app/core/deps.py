@@ -1,12 +1,13 @@
-from typing import AsyncGenerator, Optional
-from fastapi import Cookie, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from typing import AsyncGenerator
 
-from app.db.session import AsyncSessionLocal
-from app.models.user import User, UserRole, AccountStatus
+from fastapi import Cookie, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.security import verify_token
+from app.db.session import AsyncSessionLocal
+from app.models.user import AccountStatus, User, UserRole
 
 # auto_error=False so unauthenticated requests don't 403 before we check cookies
 security = HTTPBearer(auto_error=False)
@@ -22,8 +23,8 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    access_token_cookie: Optional[str] = Cookie(None, alias="access_token"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    access_token_cookie: str | None = Cookie(None, alias="access_token"),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Get current authenticated user from JWT token.
@@ -97,10 +98,10 @@ async def get_current_global_admin(
 
 
 async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    access_token_cookie: Optional[str] = Cookie(None, alias="access_token"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    access_token_cookie: str | None = Cookie(None, alias="access_token"),
     db: AsyncSession = Depends(get_db),
-) -> Optional[User]:
+) -> User | None:
     """Get current user if authenticated, None otherwise"""
     if credentials is None and access_token_cookie is None:
         return None

@@ -1,16 +1,15 @@
 """Tests for invite link model and API endpoints."""
-import pytest
-from sqlalchemy import select, and_
-from sqlalchemy.ext.asyncio import AsyncSession
-from httpx import AsyncClient
 
-from app.models.invite_link import InviteLink
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.competition import Competition, CompetitionStatus
+from app.models.invite_link import InviteLink
 from app.models.participant import Participant
 from app.models.user import User, UserRole
-
-from tests.conftest import _login, _login_full, _make_global_admin
-
+from tests.conftest import _login, _make_global_admin
 
 # ── Model Tests ──────────────────────────────────────────────────────────
 
@@ -332,8 +331,9 @@ async def test_list_links_sorted_by_created_at_desc(
 
 # ── POST /api/competitions/{id}/join — Join with invite_token ────────────
 
-from datetime import datetime, timedelta
-from app.models.competition import CompetitionMode, Visibility, JoinType
+from datetime import datetime, timedelta  # noqa: E402
+
+from app.models.competition import CompetitionMode, JoinType, Visibility  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -421,6 +421,7 @@ async def test_participant_invite_still_requires_approval(
     # Create a third user to join via the non-admin link
     from app.core.security import get_password_hash
     from app.models.user import AccountStatus
+
     third_user = User(
         email="third@example.com",
         username="thirduser",
@@ -509,6 +510,7 @@ async def test_use_count_incremented_after_join_request(
 
     from app.core.security import get_password_hash
     from app.models.user import AccountStatus
+
     third_user = User(
         email="third@example.com",
         username="thirduser",
@@ -585,6 +587,7 @@ async def test_duplicate_join_request_returns_409(
 
     from app.core.security import get_password_hash
     from app.models.user import AccountStatus
+
     third_user = User(
         email="third@example.com",
         username="thirduser",
@@ -652,9 +655,11 @@ async def test_invite_token_from_different_competition_rejected(
 
 # ── Concurrency ──────────────────────────────────────────────────────────
 
-import asyncio as _asyncio
-from sqlalchemy import update as sa_update
-from app.db.session import async_session as session_factory
+import asyncio as _asyncio  # noqa: E402
+
+from sqlalchemy import update as sa_update  # noqa: E402
+
+from app.db.session import async_session as session_factory  # noqa: E402
 
 
 @pytest.mark.asyncio

@@ -7,9 +7,10 @@ Architecture:
 """
 
 import asyncio
+import contextlib
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import WebSocket
 
@@ -28,8 +29,8 @@ class ScoreManager:
     """Manages WebSocket connections and bridges Redis pub/sub to clients."""
 
     def __init__(self):
-        self._connections: List[WebSocket] = []
-        self._subscriber_task: Optional[asyncio.Task] = None
+        self._connections: list[WebSocket] = []
+        self._subscriber_task: asyncio.Task | None = None
 
     # ── WebSocket connection management ────────────────────────────
 
@@ -47,13 +48,13 @@ class ScoreManager:
             self._connections.remove(websocket)
         logger.info(f"WS client disconnected. Total: {len(self._connections)}")
 
-    async def broadcast_score_update(self, games: List[Dict[str, Any]]):
+    async def broadcast_score_update(self, games: list[dict[str, Any]]):
         """Push score update directly to all connected WebSocket clients."""
         if not self._connections:
             return
 
         message = json.dumps({"type": "score_update", "games": games})
-        stale: List[WebSocket] = []
+        stale: list[WebSocket] = []
 
         for ws in self._connections:
             try:
@@ -65,12 +66,14 @@ class ScoreManager:
             self.disconnect(ws)
 
         if games:
-            logger.debug(f"Broadcast {len(games)} score updates to {len(self._connections)} clients")
+            logger.debug(
+                f"Broadcast {len(games)} score updates to {len(self._connections)} clients"
+            )
 
     # ── Redis pub/sub: publisher side (used by worker) ─────────────
 
     @staticmethod
-    async def publish_score_update(games: List[Dict[str, Any]]):
+    async def publish_score_update(games: list[dict[str, Any]]):
         """Publish score update to Redis channel.
 
         Called by background_jobs.py — works from both worker and API process.
@@ -104,10 +107,8 @@ class ScoreManager:
         """Stop the Redis subscriber task."""
         if self._subscriber_task:
             self._subscriber_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._subscriber_task
-            except asyncio.CancelledError:
-                pass
             self._subscriber_task = None
             logger.info("Redis score subscriber stopped")
 

@@ -1,12 +1,13 @@
-from pydantic import BaseModel, UUID4
 from datetime import datetime
-from typing import Optional
+
+from pydantic import UUID4, BaseModel
 
 from app.models.competition import CompetitionMode, CompetitionStatus
 
 
 class InviteLinkResponse(BaseModel):
     """Response for created/listed invite links."""
+
     id: UUID4
     token: str
     is_admin_invite: bool
@@ -19,17 +20,19 @@ class InviteLinkResponse(BaseModel):
 
 class InviteResolveResponse(BaseModel):
     """Response for resolving an invite token — limited competition info."""
+
     competition_id: UUID4
     competition_name: str
-    description: Optional[str] = None
+    description: str | None = None
     league_display_name: str
     mode: CompetitionMode
     status: CompetitionStatus
     participant_count: int
-    max_participants: Optional[int] = None
+    max_participants: int | None = None
     is_admin_invite: bool
 
 
 class JoinCompetitionRequest(BaseModel):
     """Optional request body for joining a competition with an invite token."""
-    invite_token: Optional[str] = None
+
+    invite_token: str | None = None

@@ -1,11 +1,11 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.deps import get_db
-from app.models.invite_link import InviteLink
 from app.models.competition import Competition, CompetitionStatus
+from app.models.invite_link import InviteLink
 from app.models.participant import Participant
 from app.schemas.invite_link import InviteResolveResponse
 
@@ -40,9 +40,7 @@ async def resolve_invite_token(
         )
 
     count_result = await db.execute(
-        select(func.count(Participant.id)).where(
-            Participant.competition_id == competition.id
-        )
+        select(func.count(Participant.id)).where(Participant.competition_id == competition.id)
     )
     participant_count = count_result.scalar() or 0
 

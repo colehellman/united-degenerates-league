@@ -1,8 +1,9 @@
-from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, JSON
-from sqlalchemy.dialects.postgresql import UUID
-from datetime import datetime
-import uuid
 import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, String
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.session import Base
 
@@ -43,6 +44,7 @@ class AuditAction(str, enum.Enum):
 
 class AuditLog(Base):
     """Immutable audit log for admin actions"""
+
     __tablename__ = "audit_logs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)

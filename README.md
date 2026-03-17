@@ -222,7 +222,6 @@ Key models:
 - `PATCH /api/competitions/{competition_id}` - Update a competition (admins only)
 - `DELETE /api/competitions/{competition_id}` - Delete a competition (global admins only)
 - `POST /api/competitions/{competition_id}/join` - Join a competition or request to join. Optionally pass an invite_token
-- `POST /api/competitions/{competition_id}/invite-links` - Create a shareable invite link for a competition
 - `GET /api/competitions/{competition_id}/invite-links` - List invite links for a competition. Participants see own, admins see all
 - `GET /api/competitions/{competition_id}/games` - Get games for a competition, optionally filtered by date
 - `POST /api/competitions/{competition_id}/sync-games` - Force an immediate ESPN game sync for a specific competition
@@ -232,10 +231,7 @@ Key models:
 - `GET /api/invite/{token}` - Resolve an invite token to competition info. No auth required
 
 ### Picks
-- `POST /api/picks/{competition_id}/daily` - Create or update daily picks for multiple games
 - `GET /api/picks/{competition_id}/my-picks` - Get current user's daily picks for a competition
-- `POST /api/picks/{competition_id}/fixed-teams` - Create fixed team/golfer selections (batch)
-- `GET /api/picks/{competition_id}/my-fixed-selections` - Get current user's fixed team/golfer selections
 
 ### Leaderboards
 - `GET /api/leaderboards/{competition_id}` - Get leaderboard for a competition
@@ -249,7 +245,6 @@ Key models:
 - `POST /api/admin/games/{game_id}/rescore` - Manually re-score all picks for a game (global admin only)
 - `POST /api/admin/competitions/{competition_id}/winner` - Designate a competition winner (global admin only)
 - `DELETE /api/admin/competitions/{competition_id}/participants/{user_id}` - Remove a participant from a competition (competition admin or global admin)
-- `GET /api/admin/competitions/{competition_id}/participants` - List all participants in a competition with user details (competition admin or global admin)
 - `POST /api/admin/competitions/{competition_id}/admins` - Add a user as a competition admin (competition admin or global admin)
 - `DELETE /api/admin/competitions/{competition_id}/admins/{admin_user_id}` - Remove a user from competition admin list (competition admin or global admin)
 - `GET /api/admin/join-requests/{competition_id}` - Get join requests for a competition (admins only)

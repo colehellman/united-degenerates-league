@@ -1,27 +1,27 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, update as sa_update
-from typing import List, Optional
 from datetime import datetime, timedelta
 
-from app.core.deps import get_db, get_current_user, get_current_global_admin
-from app.models.user import User
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy import update as sa_update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.deps import get_current_global_admin, get_current_user, get_db
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.competition import Competition, CompetitionStatus, Visibility
-from app.models.user import UserRole
-from app.models.participant import Participant, JoinRequest, JoinRequestStatus
 from app.models.game import Game
-from app.models.league import Team, Golfer, League
+from app.models.invite_link import InviteLink
+from app.models.league import Golfer, League, Team
+from app.models.participant import JoinRequest, JoinRequestStatus, Participant
 from app.models.pick import FixedTeamSelection
-from app.models.audit_log import AuditLog, AuditAction
+from app.models.user import User, UserRole
 from app.schemas.competition import (
     CompetitionCreate,
+    CompetitionListResponse,
     CompetitionResponse,
     CompetitionUpdate,
-    CompetitionListResponse,
 )
-from app.schemas.participant import JoinRequestCreate, JoinRequestResponse
-from app.models.invite_link import InviteLink
 from app.schemas.invite_link import InviteLinkResponse, JoinCompetitionRequest
+from app.schemas.participant import JoinRequestResponse
 
 router = APIRouter()
 
@@ -31,16 +31,16 @@ router = APIRouter()
 # NFL Sep→Feb, EPL Aug→May) must use this map so H2H lookups don't miss
 # October-December games when the calendar year rolls over to January.
 _LEAGUE_SEASON_START_MONTH: dict = {
-    "NFL": 9,            # September
+    "NFL": 9,  # September
     "NCAA_FOOTBALL": 9,  # September
-    "NBA": 10,           # October
-    "NHL": 10,           # October
+    "NBA": 10,  # October
+    "NHL": 10,  # October
     "NCAA_BASKETBALL": 11,  # November
-    "EPL": 8,            # August
-    "UCL": 8,            # August (Union of European Football Leagues, v2)
-    "MLS": 3,            # March
-    "MLB": 4,            # April  (single calendar year — Jan anchor works too)
-    "PGA": 9,            # PGA Tour season runs Sep-Aug
+    "EPL": 8,  # August
+    "UCL": 8,  # August (Union of European Football Leagues, v2)
+    "MLS": 3,  # March
+    "MLB": 4,  # April  (single calendar year — Jan anchor works too)
+    "PGA": 9,  # PGA Tour season runs Sep-Aug
 }
 
 
@@ -94,13 +94,15 @@ async def create_competition(
     await db.commit()
     await db.refresh(competition)
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=AuditAction.COMPETITION_CREATED,
-        target_type="competition",
-        target_id=competition.id,
-        details={"name": competition.name, "mode": competition.mode.value},
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=AuditAction.COMPETITION_CREATED,
+            target_type="competition",
+            target_id=competition.id,
+            details={"name": competition.name, "mode": competition.mode.value},
+        )
+    )
 
     # Automatically add creator as participant
     participant = Participant(
@@ -123,17 +125,18 @@ async def create_competition(
     # prevents the 201 from reaching the client.
     try:
         from app.services.sync_service import sync_games_for_competition
+
         await sync_games_for_competition(db, str(competition.id))
-    except Exception:
-        pass  # Non-critical; the scheduled job and admin sync button are fallbacks
+    except Exception:  # noqa: S110 — intentional: sync failure is non-critical; scheduled job and admin sync are fallbacks
+        pass
 
     return response
 
 
-@router.get("", response_model=List[CompetitionListResponse])
+@router.get("", response_model=list[CompetitionListResponse])
 async def list_competitions(
-    status_filter: Optional[CompetitionStatus] = None,
-    visibility: Optional[Visibility] = None,
+    status_filter: CompetitionStatus | None = None,
+    visibility: Visibility | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -153,44 +156,38 @@ async def list_competitions(
             or_(
                 Competition.visibility == Visibility.PUBLIC,
                 Competition.id.in_(
-                    select(Participant.competition_id).where(
-                        Participant.user_id == current_user.id
-                    )
+                    select(Participant.competition_id).where(Participant.user_id == current_user.id)
                 ),
             )
         )
 
     # Subquery for participant counts
     participant_counts_subquery = (
-        select(
-            Participant.competition_id,
-            func.count(Participant.id).label("participant_count")
-        )
+        select(Participant.competition_id, func.count(Participant.id).label("participant_count"))
         .group_by(Participant.competition_id)
         .subquery()
     )
 
     # Subquery to check if the current user is a participant
     user_participant_subquery = (
-        select(Participant.competition_id)
-        .where(Participant.user_id == current_user.id)
-        .subquery()
+        select(Participant.competition_id).where(Participant.user_id == current_user.id).subquery()
     )
 
     # Main query joining with subqueries
     query = (
         select(
             Competition,
-            func.coalesce(participant_counts_subquery.c.participant_count, 0).label("participant_count"),
-            user_participant_subquery.c.competition_id.is_not(None).label("is_participant")
+            func.coalesce(participant_counts_subquery.c.participant_count, 0).label(
+                "participant_count"
+            ),
+            user_participant_subquery.c.competition_id.is_not(None).label("is_participant"),
         )
         .outerjoin(
             participant_counts_subquery,
-            Competition.id == participant_counts_subquery.c.competition_id
+            Competition.id == participant_counts_subquery.c.competition_id,
         )
         .outerjoin(
-            user_participant_subquery,
-            Competition.id == user_participant_subquery.c.competition_id
+            user_participant_subquery, Competition.id == user_participant_subquery.c.competition_id
         )
     )
 
@@ -207,7 +204,7 @@ async def list_competitions(
             or_(
                 Competition.visibility == Visibility.PUBLIC,
                 user_participant_subquery.c.competition_id.is_not(None),
-                Competition.creator_id == current_user.id
+                Competition.creator_id == current_user.id,
             )
         )
 
@@ -217,7 +214,11 @@ async def list_competitions(
     response_list = []
     for comp, participant_count, is_participant in rows:
         comp_response = CompetitionListResponse(
-            **{k: getattr(comp, k) for k in CompetitionListResponse.model_fields.keys() if k != 'participant_count' and k != 'user_is_participant'},
+            **{
+                k: getattr(comp, k)
+                for k in CompetitionListResponse.model_fields
+                if k != "participant_count" and k != "user_is_participant"
+            },
             participant_count=participant_count,
             user_is_participant=is_participant,
         )
@@ -233,9 +234,7 @@ async def get_competition(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a specific competition"""
-    result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = result.scalar_one_or_none()
 
     if not competition:
@@ -257,9 +256,7 @@ async def get_competition(
 
     # Get participant count
     count_result = await db.execute(
-        select(func.count(Participant.id)).where(
-            Participant.competition_id == competition.id
-        )
+        select(func.count(Participant.id)).where(Participant.competition_id == competition.id)
     )
     participant_count = count_result.scalar()
 
@@ -285,9 +282,7 @@ async def update_competition(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a competition (admins only)"""
-    result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = result.scalar_one_or_none()
 
     if not competition:
@@ -317,17 +312,19 @@ async def update_competition(
 
     competition.updated_at = datetime.utcnow()
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=AuditAction.COMPETITION_SETTINGS_CHANGED,
-        target_type="competition",
-        target_id=competition.id,
-        details={
-            "changed_fields": list(changes.keys()),
-            "old_values": {k: str(v) for k, v in old_values.items()},
-            "new_values": {k: str(v) for k, v in changes.items()},
-        },
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=AuditAction.COMPETITION_SETTINGS_CHANGED,
+            target_type="competition",
+            target_id=competition.id,
+            details={
+                "changed_fields": list(changes.keys()),
+                "old_values": {k: str(v) for k, v in old_values.items()},
+                "new_values": {k: str(v) for k, v in changes.items()},
+            },
+        )
+    )
 
     await db.commit()
     await db.refresh(competition)
@@ -342,9 +339,7 @@ async def delete_competition(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a competition (global admins only)"""
-    result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = result.scalar_one_or_none()
 
     if not competition:
@@ -353,17 +348,19 @@ async def delete_competition(
             detail="Competition not found",
         )
 
-    db.add(AuditLog(
-        admin_user_id=current_user.id,
-        action=AuditAction.COMPETITION_DELETED,
-        target_type="competition",
-        target_id=competition.id,
-        details={
-            "name": competition.name,
-            "status": competition.status.value,
-            "creator_id": str(competition.creator_id),
-        },
-    ))
+    db.add(
+        AuditLog(
+            admin_user_id=current_user.id,
+            action=AuditAction.COMPETITION_DELETED,
+            target_type="competition",
+            target_id=competition.id,
+            details={
+                "name": competition.name,
+                "status": competition.status.value,
+                "creator_id": str(competition.creator_id),
+            },
+        )
+    )
 
     await db.delete(competition)
     await db.commit()
@@ -374,14 +371,12 @@ async def delete_competition(
 @router.post("/{competition_id}/join")
 async def join_competition(
     competition_id: str,
-    body: Optional[JoinCompetitionRequest] = Body(default=None),
+    body: JoinCompetitionRequest | None = Body(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Join a competition or request to join. Optionally pass an invite_token."""
-    result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = result.scalar_one_or_none()
 
     if not competition:
@@ -415,9 +410,7 @@ async def join_competition(
     # Check if max participants reached
     if competition.max_participants:
         count_result = await db.execute(
-            select(func.count(Participant.id)).where(
-                Participant.competition_id == competition.id
-            )
+            select(func.count(Participant.id)).where(Participant.competition_id == competition.id)
         )
         if count_result.scalar() >= competition.max_participants:
             raise HTTPException(
@@ -429,9 +422,7 @@ async def join_competition(
     invite_link = None
     invite_token = body.invite_token if body else None
     if invite_token:
-        link_result = await db.execute(
-            select(InviteLink).where(InviteLink.token == invite_token)
-        )
+        link_result = await db.execute(select(InviteLink).where(InviteLink.token == invite_token))
         invite_link = link_result.scalar_one_or_none()
 
         if not invite_link:
@@ -446,9 +437,8 @@ async def join_competition(
             )
 
     # Determine join behavior
-    should_join_directly = (
-        competition.join_type == "open"
-        or (invite_link and invite_link.is_admin_invite)
+    should_join_directly = competition.join_type == "open" or (
+        invite_link and invite_link.is_admin_invite
     )
 
     if should_join_directly:
@@ -507,16 +497,18 @@ async def join_competition(
     return JoinRequestResponse.model_validate(join_request)
 
 
-@router.post("/{competition_id}/invite-links", response_model=InviteLinkResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{competition_id}/invite-links",
+    response_model=InviteLinkResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_invite_link(
     competition_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a shareable invite link for a competition."""
-    result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = result.scalar_one_or_none()
     if not competition:
         raise HTTPException(
@@ -564,9 +556,7 @@ async def list_invite_links(
     db: AsyncSession = Depends(get_db),
 ):
     """List invite links for a competition. Participants see own, admins see all."""
-    result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = result.scalar_one_or_none()
     if not competition:
         raise HTTPException(
@@ -593,9 +583,7 @@ async def list_invite_links(
         or current_user.role == UserRole.GLOBAL_ADMIN
     )
 
-    query = select(InviteLink).where(
-        InviteLink.competition_id == competition.id
-    )
+    query = select(InviteLink).where(InviteLink.competition_id == competition.id)
     if not is_admin:
         query = query.where(InviteLink.created_by_user_id == current_user.id)
 
@@ -610,8 +598,8 @@ async def list_invite_links(
 @router.get("/{competition_id}/games")
 async def get_competition_games(
     competition_id: str,
-    date: Optional[str] = Query(None, description="Filter by date (YYYY-MM-DD format)"),
-    utc_offset_minutes: Optional[int] = Query(
+    date: str | None = Query(None, description="Filter by date (YYYY-MM-DD format)"),
+    utc_offset_minutes: int | None = Query(
         0,
         description=(
             "Client timezone offset in minutes west of UTC "
@@ -626,9 +614,7 @@ async def get_competition_games(
 ):
     """Get games for a competition, optionally filtered by date"""
     # Verify competition exists
-    comp_result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    comp_result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = comp_result.scalar_one_or_none()
 
     if not competition:
@@ -683,7 +669,7 @@ async def get_competition_games(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid date format. Use YYYY-MM-DD",
-            )
+            ) from None
 
     # Execute query
     result = await db.execute(query.order_by(Game.scheduled_start_time))
@@ -692,9 +678,7 @@ async def get_competition_games(
     # Resolve the competition's league name once so _season_start() can pick
     # the correct cross-year anchor for H2H queries (NBA, NHL, NFL etc. all
     # have seasons that begin mid-year in the prior calendar year).
-    league_result = await db.execute(
-        select(League).where(League.id == competition.league_id)
-    )
+    league_result = await db.execute(select(League).where(League.id == competition.league_id))
     league = league_result.scalar_one_or_none()
     league_name = league.name.value if league else "unknown"
     h2h_season_start = _season_start(league_name)
@@ -708,9 +692,7 @@ async def get_competition_games(
 
     teams_by_id: dict = {}
     if team_ids:
-        team_result = await db.execute(
-            select(Team).where(Team.id.in_(list(team_ids)))
-        )
+        team_result = await db.execute(select(Team).where(Team.id.in_(list(team_ids))))
         for t in team_result.scalars().all():
             teams_by_id[t.id] = t
 
@@ -725,7 +707,7 @@ async def get_competition_games(
                     Game.winner_team_id.is_not(None),
                     Game.scheduled_start_time >= h2h_season_start,
                     Game.home_team_id.in_(list(team_ids)),
-                    Game.away_team_id.in_(list(team_ids))
+                    Game.away_team_id.in_(list(team_ids)),
                 )
             )
         )
@@ -742,11 +724,12 @@ async def get_competition_games(
 
         # Filter pre-fetched H2H games for this specific pair
         h2h_games = [
-            g for g in h2h_games_all
-            if (g.home_team_id == home_team.id and g.away_team_id == away_team.id) or
-               (g.home_team_id == away_team.id and g.away_team_id == home_team.id)
+            g
+            for g in h2h_games_all
+            if (g.home_team_id == home_team.id and g.away_team_id == away_team.id)
+            or (g.home_team_id == away_team.id and g.away_team_id == home_team.id)
         ]
-        
+
         h2h_home_wins = sum(1 for g in h2h_games if g.winner_team_id == home_team.id)
         h2h_away_wins = sum(1 for g in h2h_games if g.winner_team_id == away_team.id)
 
@@ -760,39 +743,41 @@ async def get_competition_games(
                 return f"{w}-{l}-{ties}"
             return f"{w}-{l}"
 
-        games_response.append({
-            "id": str(game.id),
-            "external_id": game.external_id,
-            # Append "Z" so the frontend knows this is UTC. The column is a naive
-            # DateTime but game.py confirms values are always stored as UTC.
-            # Without the suffix, JavaScript treats the string as local time and
-            # displays it 5 hours early for Eastern-timezone users.
-            "scheduled_start_time": game.scheduled_start_time.isoformat() + "Z",
-            "status": game.status.value,
-            "home_team": {
-                "id": str(home_team.id),
-                "name": home_team.name,
-                "city": home_team.city,
-                "abbreviation": home_team.abbreviation,
-                # Season record synced from ESPN each cycle; None until first sync.
-                "record": _record_str(home_team.wins, home_team.losses, home_team.ties),
-                # Head-to-head wins against the opponent this season.
-                "h2h_wins": h2h_home_wins,
-            },
-            "away_team": {
-                "id": str(away_team.id),
-                "name": away_team.name,
-                "city": away_team.city,
-                "abbreviation": away_team.abbreviation,
-                "record": _record_str(away_team.wins, away_team.losses, away_team.ties),
-                "h2h_wins": h2h_away_wins,
-            },
-            "home_team_score": game.home_team_score,
-            "away_team_score": game.away_team_score,
-            "venue_name": game.venue_name,
-            "venue_city": game.venue_city,
-            "spread": game.spread,
-        })
+        games_response.append(
+            {
+                "id": str(game.id),
+                "external_id": game.external_id,
+                # Append "Z" so the frontend knows this is UTC. The column is a naive
+                # DateTime but game.py confirms values are always stored as UTC.
+                # Without the suffix, JavaScript treats the string as local time and
+                # displays it 5 hours early for Eastern-timezone users.
+                "scheduled_start_time": game.scheduled_start_time.isoformat() + "Z",
+                "status": game.status.value,
+                "home_team": {
+                    "id": str(home_team.id),
+                    "name": home_team.name,
+                    "city": home_team.city,
+                    "abbreviation": home_team.abbreviation,
+                    # Season record synced from ESPN each cycle; None until first sync.
+                    "record": _record_str(home_team.wins, home_team.losses, home_team.ties),
+                    # Head-to-head wins against the opponent this season.
+                    "h2h_wins": h2h_home_wins,
+                },
+                "away_team": {
+                    "id": str(away_team.id),
+                    "name": away_team.name,
+                    "city": away_team.city,
+                    "abbreviation": away_team.abbreviation,
+                    "record": _record_str(away_team.wins, away_team.losses, away_team.ties),
+                    "h2h_wins": h2h_away_wins,
+                },
+                "home_team_score": game.home_team_score,
+                "away_team_score": game.away_team_score,
+                "venue_name": game.venue_name,
+                "venue_city": game.venue_city,
+                "spread": game.spread,
+            }
+        )
 
     return games_response
 
@@ -809,9 +794,7 @@ async def sync_competition_games(
     so the caller sees errors and game counts immediately rather than relying
     on the silent 5-minute background job.
     """
-    result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = result.scalar_one_or_none()
 
     if not competition:
@@ -838,11 +821,14 @@ async def sync_competition_games(
     except Exception as exc:
         await db.rollback()
         import logging
-        logging.getLogger(__name__).error(f"Game sync failed for competition {competition_id}: {exc}", exc_info=True)
+
+        logging.getLogger(__name__).error(
+            f"Game sync failed for competition {competition_id}: {exc}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Game sync failed. Please try again later.",
-        )
+        ) from None
 
     return sync_result
 
@@ -855,9 +841,7 @@ async def get_available_selections(
 ):
     """Get available teams/golfers for fixed team selection"""
     # Verify competition exists
-    comp_result = await db.execute(
-        select(Competition).where(Competition.id == competition_id)
-    )
+    comp_result = await db.execute(select(Competition).where(Competition.id == competition_id))
     competition = comp_result.scalar_one_or_none()
 
     if not competition:
@@ -883,16 +867,13 @@ async def get_available_selections(
 
     # Get league to determine sport type
     from app.models.league import League
-    league_result = await db.execute(
-        select(League).where(League.id == competition.league_id)
-    )
+
+    league_result = await db.execute(select(League).where(League.id == competition.league_id))
     league = league_result.scalar_one()
 
     # Get already selected teams/golfers
     selected_result = await db.execute(
-        select(FixedTeamSelection).where(
-            FixedTeamSelection.competition_id == competition.id
-        )
+        select(FixedTeamSelection).where(FixedTeamSelection.competition_id == competition.id)
     )
     selected_selections = selected_result.scalars().all()
     selected_team_ids = {sel.team_id for sel in selected_selections if sel.team_id}
@@ -915,22 +896,19 @@ async def get_available_selections(
                 for golfer in golfers
             ]
         }
-    else:
-        # Get teams for this league
-        teams_result = await db.execute(
-            select(Team).where(Team.league_id == competition.league_id)
-        )
-        teams = teams_result.scalars().all()
+    # Get teams for this league
+    teams_result = await db.execute(select(Team).where(Team.league_id == competition.league_id))
+    teams = teams_result.scalars().all()
 
-        return {
-            "teams": [
-                {
-                    "id": str(team.id),
-                    "name": team.name,
-                    "city": team.city,
-                    "abbreviation": team.abbreviation,
-                    "is_available": team.id not in selected_team_ids,
-                }
-                for team in teams
-            ]
-        }
+    return {
+        "teams": [
+            {
+                "id": str(team.id),
+                "name": team.name,
+                "city": team.city,
+                "abbreviation": team.abbreviation,
+                "is_available": team.id not in selected_team_ids,
+            }
+            for team in teams
+        ]
+    }

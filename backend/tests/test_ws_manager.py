@@ -1,9 +1,10 @@
-import json
-import pytest
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.services.ws_manager import ScoreManager, SCORE_CHANNEL
+import pytest
+
+from app.services.ws_manager import SCORE_CHANNEL, ScoreManager
 
 
 @pytest.fixture
@@ -51,7 +52,9 @@ async def test_publish_to_redis(manager: ScoreManager):
         games = [{"id": "1", "score": "14-7"}]
         await manager.publish_score_update(games)
 
-        mock_redis.publish.assert_called_with(SCORE_CHANNEL, '{"type": "score_update", "games": [{"id": "1", "score": "14-7"}]}')
+        mock_redis.publish.assert_called_with(
+            SCORE_CHANNEL, '{"type": "score_update", "games": [{"id": "1", "score": "14-7"}]}'
+        )
 
 
 @pytest.mark.asyncio
@@ -109,6 +112,7 @@ async def test_start_and_stop_subscriber(manager: ScoreManager):
 
 # ── _subscribe_loop ───────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_subscribe_loop_score_update_broadcast():
     """_subscribe_loop forwards score_update messages to connected WebSocket clients."""
@@ -118,7 +122,10 @@ async def test_subscribe_loop_score_update_broadcast():
 
     async def fake_listen():
         yield {"type": "subscribe", "data": 1}  # non-message: skipped
-        yield {"type": "message", "data": json.dumps({"type": "score_update", "games": [{"id": "g1"}]})}
+        yield {
+            "type": "message",
+            "data": json.dumps({"type": "score_update", "games": [{"id": "g1"}]}),
+        }
         raise asyncio.CancelledError()
 
     mock_pubsub = MagicMock()
@@ -163,7 +170,7 @@ async def test_subscribe_loop_retries_after_connection_error():
     async def fake_listen_ok():
         # yield makes this an async generator; raising CancelledError exits the for-loop
         raise asyncio.CancelledError()
-        yield  # noqa: unreachable - needed to make this an async generator
+        yield  # unreachable but needed to make this an async generator
 
     mock_pubsub = MagicMock()
     mock_pubsub.subscribe = AsyncMock()
@@ -182,6 +189,7 @@ async def test_subscribe_loop_retries_after_connection_error():
 async def test_publish_redis_failure_falls_back_to_direct_broadcast():
     """When Redis publish fails, direct broadcast is used as fallback."""
     from app.services.ws_manager import score_manager  # module-level singleton used by fallback
+
     ws = AsyncMock()
     await score_manager.connect(ws)
     try:

@@ -1,19 +1,21 @@
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.competition import Competition
 from app.models.participant import JoinRequest, JoinRequestStatus, Participant
-from app.models.audit_log import AuditLog, AuditAction
-from tests.conftest import _login, _login_full, _make_global_admin
+from app.models.user import User
+from tests.conftest import _login, _make_global_admin
 
 pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
-async def join_request(db_session: AsyncSession, second_user: User, approval_competition: Competition):
+async def join_request(
+    db_session: AsyncSession, second_user: User, approval_competition: Competition
+):
     """Create a join request from second_user for approval_competition."""
     req = JoinRequest(
         user_id=second_user.id,
@@ -33,7 +35,7 @@ async def test_get_join_requests_as_admin(
     join_request: JoinRequest,
 ):
     """Competition admin must be able to see pending join requests."""
-    token = await _login(client, email="test@example.com") # test_user is admin
+    token = await _login(client, email="test@example.com")  # test_user is admin
 
     response = await client.get(
         f"/api/admin/join-requests/{approval_competition.id}",
@@ -64,9 +66,7 @@ async def test_get_audit_logs_with_filters(
         target_type="competition",
         target_id=active_competition.id,
     )
-    log2 = AuditLog(
-        admin_user_id=test_user.id, action=AuditAction.USER_DELETED, target_type="user"
-    )
+    log2 = AuditLog(admin_user_id=test_user.id, action=AuditAction.USER_DELETED, target_type="user")
     db_session.add_all([log1, log2])
     await db_session.commit()
 
@@ -94,7 +94,6 @@ async def test_get_audit_logs_with_filters(
     assert data[0]["target_id"] == str(active_competition.id)
 
 
-
 async def test_get_join_requests_as_non_admin(
     client: AsyncClient,
     second_user: User,
@@ -102,7 +101,7 @@ async def test_get_join_requests_as_non_admin(
     join_request: JoinRequest,
 ):
     """A regular user must NOT be able to see join requests."""
-    token = await _login(client, email="second@example.com") # second_user is not admin
+    token = await _login(client, email="second@example.com")  # second_user is not admin
 
     response = await client.get(
         f"/api/admin/join-requests/{approval_competition.id}",
@@ -183,6 +182,7 @@ async def test_reject_join_request_as_admin(
 # ---------------------------------------------------------------------------
 # GET /admin/users
 # ---------------------------------------------------------------------------
+
 
 async def test_audit_logs_as_league_admin_no_competitions(
     client: AsyncClient,
@@ -272,6 +272,7 @@ async def test_list_users_forbidden_for_regular_user(
 # ---------------------------------------------------------------------------
 # GET /admin/competitions/{id}/participants
 # ---------------------------------------------------------------------------
+
 
 async def test_list_participants_as_competition_admin(
     client: AsyncClient,
