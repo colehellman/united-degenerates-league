@@ -1,9 +1,12 @@
 import logging
 from datetime import datetime, timedelta
-from sqlalchemy import select, and_
-from app.models.user import User, AccountStatus
+
+from sqlalchemy import and_, select
+
+from app.models.user import AccountStatus, User
 
 logger = logging.getLogger(__name__)
+
 
 async def cleanup_pending_deletions(db):
     """
@@ -14,14 +17,8 @@ async def cleanup_pending_deletions(db):
     cutoff = now - timedelta(days=30)
 
     # Find users pending deletion past grace period
-    stmt = (
-        select(User)
-        .where(
-            and_(
-                User.status == AccountStatus.PENDING_DELETION,
-                User.deletion_requested_at <= cutoff
-            )
-        )
+    stmt = select(User).where(
+        and_(User.status == AccountStatus.PENDING_DELETION, User.deletion_requested_at <= cutoff)
     )
     result = await db.execute(stmt)
     users_to_delete = result.scalars().all()

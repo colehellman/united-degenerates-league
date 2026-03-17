@@ -19,7 +19,6 @@ In development, you don't need this — the API starts the scheduler itself
 import asyncio
 import logging
 import signal
-import sys
 
 # Configure logging before any app imports
 logging.basicConfig(

@@ -1,20 +1,25 @@
 import logging
-from typing import List, Optional, Tuple, Dict
-from datetime import datetime, timedelta, timezone
-from sqlalchemy import select, and_
+from datetime import UTC, datetime, timedelta
 
-from app.models.game import Game, GameStatus
+from sqlalchemy import and_, select
+
 from app.models.competition import Competition
+from app.models.game import Game, GameStatus
 from app.models.league import Team
-from app.services.sports_api.sports_service import sports_service
 from app.services.sports_api.base import GameData
+from app.services.sports_api.sports_service import sports_service
 
 logger = logging.getLogger(__name__)
 
+
 async def _find_or_create_team(
-    db, league_id, name: str, external_id: str, abbreviation: str,
+    db,
+    league_id,
+    name: str,
+    external_id: str,
+    abbreviation: str,
     cache: dict,
-) -> Optional[Team]:
+) -> Team | None:
     """Find existing team by external_id or create a new one."""
     if not external_id:
         return None
@@ -37,11 +42,12 @@ async def _find_or_create_team(
     logger.info(f"Created team: {name} ({abbreviation})")
     return team
 
+
 def _apply_team_record(
     team: Team,
-    wins: Optional[int],
-    losses: Optional[int],
-    ties: Optional[int],
+    wins: int | None,
+    losses: int | None,
+    ties: int | None,
 ) -> None:
     """Update a Team's season record in-place when the API provides values."""
     if wins is not None:
@@ -51,10 +57,14 @@ def _apply_team_record(
     if ties is not None:
         team.ties = ties
 
+
 async def _sync_game_for_competition(
-    db, competition: Competition, game_data: GameData,
-    home_team: Team, away_team: Team,
-) -> Tuple[int, int]:
+    db,
+    competition: Competition,
+    game_data: GameData,
+    home_team: Team,
+    away_team: Team,
+) -> tuple[int, int]:
     """Sync a single game for a competition. Returns (created_count, updated_count)."""
     # Check if game already exists for this competition
     stmt = select(Game).where(
@@ -69,23 +79,28 @@ async def _sync_game_for_competition(
     if existing_game:
         # Update scores and status
         from app.services.score_service import score_picks_for_game
+
         was_not_final = existing_game.status != GameStatus.FINAL
         new_status = GameStatus(game_data.status)
 
         existing_game.status = new_status
         existing_game.home_team_score = game_data.home_score
         existing_game.away_team_score = game_data.away_score
-        
+
         # Always update odds (spread/over_under) if available
         if game_data.spread is not None:
             existing_game.spread = game_data.spread
         if game_data.over_under is not None:
             existing_game.over_under = game_data.over_under
-            
+
         existing_game.updated_at = datetime.utcnow()
 
         # Determine winner correctly
-        if new_status == GameStatus.FINAL and game_data.home_score is not None and game_data.away_score is not None:
+        if (
+            new_status == GameStatus.FINAL
+            and game_data.home_score is not None
+            and game_data.away_score is not None
+        ):
             if game_data.home_score > game_data.away_score:
                 existing_game.winner_team_id = home_team.id
             elif game_data.away_score > game_data.home_score:
@@ -107,32 +122,32 @@ async def _sync_game_for_competition(
                 existing_game.winner_team_id = None
 
         return (0, 1)
-    else:
-        # Create new game.
-        start_time = game_data.scheduled_start_time
-        if start_time is not None and start_time.tzinfo is not None:
-            start_time = start_time.astimezone(timezone.utc).replace(tzinfo=None)
+    # Create new game.
+    start_time = game_data.scheduled_start_time
+    if start_time is not None and start_time.tzinfo is not None:
+        start_time = start_time.astimezone(UTC).replace(tzinfo=None)
 
-        game = Game(
-            competition_id=competition.id,
-            external_id=game_data.external_id,
-            home_team_id=home_team.id,
-            away_team_id=away_team.id,
-            scheduled_start_time=start_time,
-            status=GameStatus(game_data.status),
-            home_team_score=game_data.home_score,
-            away_team_score=game_data.away_score,
-            venue_name=game_data.venue,
-            spread=game_data.spread,
-            over_under=game_data.over_under,
-        )
-        db.add(game)
-        return (1, 0)
+    game = Game(
+        competition_id=competition.id,
+        external_id=game_data.external_id,
+        home_team_id=home_team.id,
+        away_team_id=away_team.id,
+        scheduled_start_time=start_time,
+        status=GameStatus(game_data.status),
+        home_team_score=game_data.home_score,
+        away_team_score=game_data.away_score,
+        venue_name=game_data.venue,
+        spread=game_data.spread,
+        over_under=game_data.over_under,
+    )
+    db.add(game)
+    return (1, 0)
+
 
 async def sync_games_for_competition(db, competition_id: str) -> dict:
     """Sync games from ESPN for a single competition."""
     from sqlalchemy.orm import selectinload
-    
+
     # Load competition with its league
     stmt = (
         select(Competition)
@@ -176,13 +191,17 @@ async def sync_games_for_competition(db, competition_id: str) -> dict:
 
     for game_data in api_games:
         home_team = await _find_or_create_team(
-            db, league.id, game_data.home_team,
+            db,
+            league.id,
+            game_data.home_team,
             game_data.home_team_external_id,
             game_data.home_team_abbreviation,
             existing_teams,
         )
         away_team = await _find_or_create_team(
-            db, league.id, game_data.away_team,
+            db,
+            league.id,
+            game_data.away_team,
             game_data.away_team_external_id,
             game_data.away_team_abbreviation,
             existing_teams,
@@ -205,7 +224,11 @@ async def sync_games_for_competition(db, competition_id: str) -> dict:
         )
 
         created, updated = await _sync_game_for_competition(
-            db, competition, game_data, home_team, away_team,
+            db,
+            competition,
+            game_data,
+            home_team,
+            away_team,
         )
         total_created += created
         total_updated += updated

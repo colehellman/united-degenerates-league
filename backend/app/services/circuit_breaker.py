@@ -1,7 +1,6 @@
-from datetime import datetime, timedelta
-from typing import Dict, Optional
-from enum import Enum
 import logging
+from datetime import datetime
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +30,8 @@ class CircuitBreaker:
 
         self.state = CircuitState.CLOSED
         self.failure_count = 0
-        self.last_failure_time: Optional[datetime] = None
-        self.last_success_time: Optional[datetime] = None
+        self.last_failure_time: datetime | None = None
+        self.last_success_time: datetime | None = None
 
     async def async_call(self, func, *args, **kwargs):
         """Execute async coroutine with circuit breaker protection.
@@ -138,29 +137,32 @@ class CircuitBreaker:
         self.state = CircuitState.CLOSED
         self.failure_count = 0
 
-    def get_status(self) -> Dict:
+    def get_status(self) -> dict:
         """Get current circuit breaker status"""
         return {
             "name": self.name,
             "state": self.state,
             "failure_count": self.failure_count,
             "failure_threshold": self.failure_threshold,
-            "last_failure_time": self.last_failure_time.isoformat() if self.last_failure_time else None,
-            "last_success_time": self.last_success_time.isoformat() if self.last_success_time else None,
+            "last_failure_time": self.last_failure_time.isoformat()
+            if self.last_failure_time
+            else None,
+            "last_success_time": self.last_success_time.isoformat()
+            if self.last_success_time
+            else None,
             "time_until_reset": self._time_until_reset() if self.state == CircuitState.OPEN else 0,
         }
 
 
 class CircuitBreakerOpenError(Exception):
     """Raised when circuit breaker is open"""
-    pass
 
 
 class CircuitBreakerManager:
     """Manages multiple circuit breakers for different APIs"""
 
     def __init__(self):
-        self.breakers: Dict[str, CircuitBreaker] = {}
+        self.breakers: dict[str, CircuitBreaker] = {}
 
     def get_breaker(
         self,
@@ -182,7 +184,7 @@ class CircuitBreakerManager:
         for breaker in self.breakers.values():
             breaker.reset()
 
-    def get_all_status(self) -> Dict[str, Dict]:
+    def get_all_status(self) -> dict[str, dict]:
         """Get status of all circuit breakers"""
         return {name: breaker.get_status() for name, breaker in self.breakers.items()}
 

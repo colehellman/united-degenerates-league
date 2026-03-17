@@ -1,9 +1,10 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
+import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
-import uuid
-import enum
 
 from app.db.session import Base
 
@@ -53,7 +54,19 @@ class User(Base):
     # Relationships
     participants = relationship("Participant", back_populates="user", cascade="all, delete-orphan")
     picks = relationship("Pick", back_populates="user", cascade="all, delete-orphan")
-    fixed_team_selections = relationship("FixedTeamSelection", back_populates="user", cascade="all, delete-orphan")
-    created_competitions = relationship("Competition", back_populates="creator", foreign_keys="Competition.creator_id", passive_deletes=True)
-    join_requests = relationship("JoinRequest", back_populates="user", cascade="all, delete-orphan", foreign_keys="JoinRequest.user_id")
+    fixed_team_selections = relationship(
+        "FixedTeamSelection", back_populates="user", cascade="all, delete-orphan"
+    )
+    created_competitions = relationship(
+        "Competition",
+        back_populates="creator",
+        foreign_keys="Competition.creator_id",
+        passive_deletes=True,
+    )
+    join_requests = relationship(
+        "JoinRequest",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="JoinRequest.user_id",
+    )
     bug_reports = relationship("BugReport", back_populates="user", cascade="all, delete-orphan")

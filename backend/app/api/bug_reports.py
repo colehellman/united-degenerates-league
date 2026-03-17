@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import List
 from datetime import datetime
 
-from app.core.deps import get_db, get_current_user, get_current_global_admin
-from app.models.user import User
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.deps import get_current_global_admin, get_current_user, get_db
 from app.models.bug_report import BugReport
+from app.models.user import User
 from app.schemas.bug_report import BugReportCreate, BugReportResponse, BugReportStatusUpdate
 
 router = APIRouter()
@@ -32,7 +32,7 @@ async def submit_bug_report(
     return BugReportResponse.model_validate(report)
 
 
-@router.get("/mine", response_model=List[BugReportResponse])
+@router.get("/mine", response_model=list[BugReportResponse])
 async def get_my_bug_reports(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -47,7 +47,7 @@ async def get_my_bug_reports(
     return [BugReportResponse.model_validate(r) for r in reports]
 
 
-@router.get("", response_model=List[BugReportResponse])
+@router.get("", response_model=list[BugReportResponse])
 async def list_bug_reports(
     limit: int = 100,
     offset: int = 0,

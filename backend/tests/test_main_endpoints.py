@@ -3,6 +3,7 @@
 Tests the root /, /health, security headers, and the unhandled exception handler.
 Uses the existing `client` fixture (ASGITransport, no lifespan invocation).
 """
+
 import pytest
 from httpx import AsyncClient
 

@@ -1,12 +1,13 @@
-import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
 from app.models.competition import Competition, CompetitionStatus
 from app.models.league import League
+from app.models.user import User
 from tests.conftest import _login, _make_global_admin
 
 
@@ -166,7 +167,7 @@ async def test_update_competition_with_tz_aware_dates(
     """
     await _make_global_admin(db_session, test_user)
     token = await _login(client)
-    future = (datetime.now(tz=timezone.utc) + timedelta(days=14)).isoformat()
+    future = (datetime.now(tz=UTC) + timedelta(days=14)).isoformat()
 
     resp = await client.patch(
         f"/api/competitions/{active_competition.id}",
@@ -192,8 +193,8 @@ async def test_games_date_filter_respects_utc_offset(
     2026-03-08 00:00–23:59 UTC, which excludes it.  With offset=300 (EST) the
     window becomes 2026-03-08 05:00 → 2026-03-09 04:59 UTC, which includes it.
     """
-    from app.models.participant import Participant
     from app.models.game import Game, GameStatus
+    from app.models.participant import Participant
 
     # Make test_user a participant so the endpoint allows access.
     p = Participant(user_id=test_user.id, competition_id=active_competition.id)
@@ -241,7 +242,7 @@ async def test_games_date_filter_respects_utc_offset(
         "Game MUST appear when EST offset is supplied (9pm ET = 2am UTC on the 9th)"
     )
     # Check that the spread is correctly serialized in the response
-    game_data = next((g for g in games_with_offset if g['id'] == str(late_evening_game.id)), None)
+    game_data = next((g for g in games_with_offset if g["id"] == str(late_evening_game.id)), None)
     assert game_data is not None
     assert "spread" in game_data
     assert game_data["spread"] == -7.5

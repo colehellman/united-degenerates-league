@@ -1,9 +1,10 @@
-import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from app.services.sports_api.base import APIProvider, GameData
 from app.services.sports_api.sports_service import SportsDataService
-from app.services.sports_api.base import GameData, APIProvider
 
 
 @pytest.fixture
@@ -41,9 +42,7 @@ async def test_get_schedule_success_with_caching(sports_service, mock_redis_clie
     end_date = datetime(2023, 1, 3)
 
     # First call - should call the API and set cache
-    games = await sports_service.get_schedule(
-        "NFL", start_date, end_date, use_cache=True
-    )
+    games = await sports_service.get_schedule("NFL", start_date, end_date, use_cache=True)
     assert len(games) == 1
     sports_service.clients[0].get_schedule.assert_called_once()
     mock_redis_client.setex.assert_called_once()
@@ -51,9 +50,7 @@ async def test_get_schedule_success_with_caching(sports_service, mock_redis_clie
     # Second call - should hit the cache
     sports_service.clients[0].get_schedule.reset_mock()
     mock_redis_client.get.return_value = sports_service._serialize_games([game])
-    games = await sports_service.get_schedule(
-        "NFL", start_date, end_date, use_cache=True
-    )
+    games = await sports_service.get_schedule("NFL", start_date, end_date, use_cache=True)
     assert len(games) == 1
     sports_service.clients[0].get_schedule.assert_not_called()
 
@@ -71,7 +68,9 @@ async def test_get_schedule_primary_empty_tries_secondary(sports_service):
     sports_service.clients[0].get_schedule.return_value = []
     sports_service.clients[1].get_schedule.return_value = [game]
 
-    games = await sports_service.get_schedule("NFL", datetime(2023, 1, 1), datetime(2023, 1, 3), use_cache=False)
+    games = await sports_service.get_schedule(
+        "NFL", datetime(2023, 1, 1), datetime(2023, 1, 3), use_cache=False
+    )
     assert len(games) == 1
     assert games[0].external_id == "g2"
 
@@ -85,13 +84,15 @@ async def test_get_schedule_all_apis_fail_raises(sports_service):
     sports_service.clients[1].get_schedule.return_value = []
 
     with pytest.raises(APIUnavailableError):
-        await sports_service.get_schedule("NFL", datetime(2023, 1, 1), datetime(2023, 1, 3), use_cache=False)
+        await sports_service.get_schedule(
+            "NFL", datetime(2023, 1, 1), datetime(2023, 1, 3), use_cache=False
+        )
 
 
 @pytest.mark.asyncio
 async def test_get_schedule_rate_limit_skips_to_next(sports_service):
     """RateLimitExceededError on primary causes fallback to secondary."""
-    from app.services.sports_api.base import RateLimitExceededError, APIUnavailableError
+    from app.services.sports_api.base import RateLimitExceededError
 
     game = GameData(
         external_id="g3",
@@ -103,7 +104,9 @@ async def test_get_schedule_rate_limit_skips_to_next(sports_service):
     sports_service.clients[0].get_schedule.side_effect = RateLimitExceededError("too many")
     sports_service.clients[1].get_schedule.return_value = [game]
 
-    games = await sports_service.get_schedule("NFL", datetime(2023, 1, 1), datetime(2023, 1, 3), use_cache=False)
+    games = await sports_service.get_schedule(
+        "NFL", datetime(2023, 1, 1), datetime(2023, 1, 3), use_cache=False
+    )
     assert len(games) == 1
 
 
@@ -268,6 +271,7 @@ async def test_set_cache_no_redis(sports_service):
 # ---------------------------------------------------------------------------
 # Error-handler coverage: circuit breaker, rate-limit, generic exception
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_schedule_circuit_breaker_open_falls_through(sports_service):

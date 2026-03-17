@@ -1,13 +1,12 @@
-from pydantic import BaseModel, UUID4, Field
-from typing import Optional
+from pydantic import UUID4, BaseModel, Field
 
-from app.models.user import AccountStatus, UserRole
 from app.models.competition import CompetitionStatus
+from app.models.user import AccountStatus, UserRole
 
 
 class UserStatusUpdate(BaseModel):
     status: AccountStatus
-    reason: Optional[str] = Field(None, max_length=500)
+    reason: str | None = Field(None, max_length=500)
 
 
 class UserRoleUpdate(BaseModel):
@@ -22,12 +21,12 @@ class ScoreCorrectionRequest(BaseModel):
 
 class WinnerDesignationRequest(BaseModel):
     winner_user_id: UUID4
-    reason: Optional[str] = Field(None, max_length=500)
+    reason: str | None = Field(None, max_length=500)
 
 
 class CompetitionStatusChange(BaseModel):
     status: CompetitionStatus
-    reason: Optional[str] = Field(None, max_length=500)
+    reason: str | None = Field(None, max_length=500)
 
 
 class AdminManagement(BaseModel):

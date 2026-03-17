@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
-from typing import Optional, Any
+
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+
 from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -14,7 +15,7 @@ SECRET_KEY = settings.SECRET_KEY
 REFRESH_SECRET_KEY = settings.REFRESH_SECRET_KEY or settings.SECRET_KEY
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """Create JWT access token"""
     to_encode = data.copy()
     if expires_delta:
@@ -37,7 +38,7 @@ def create_refresh_token(data: dict) -> str:
     return encoded_jwt
 
 
-def verify_token(token: str, token_type: str = "access") -> Optional[dict]:
+def verify_token(token: str, token_type: str = "access") -> dict | None:
     """Verify JWT token and return payload"""
     key = REFRESH_SECRET_KEY if token_type == "refresh" else SECRET_KEY
     try:

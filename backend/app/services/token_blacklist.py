@@ -12,7 +12,6 @@ production deployments MUST have Redis configured.
 
 import logging
 from datetime import datetime
-from typing import Optional
 
 from app.core.config import settings
 
@@ -26,6 +25,7 @@ def _get_redis():
     """Get a synchronous Redis client, or None if unavailable."""
     try:
         import redis
+
         client = redis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
         client.ping()
         return client
@@ -33,7 +33,7 @@ def _get_redis():
         return None
 
 
-def blacklist_token(jti: str, exp: Optional[int] = None) -> None:
+def blacklist_token(jti: str, exp: int | None = None) -> None:
     """Add a token's JTI to the blacklist.
 
     Args:
@@ -110,7 +110,7 @@ def blacklist_all_user_tokens(user_id: str) -> None:
                 client.close()
 
 
-def is_user_token_revoked(user_id: str, token_iat: Optional[int] = None) -> bool:
+def is_user_token_revoked(user_id: str, token_iat: int | None = None) -> bool:
     """Check if a user's tokens were revoked after the given token was issued."""
     if not token_iat:
         return False

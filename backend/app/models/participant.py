@@ -1,9 +1,10 @@
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, Float, String
+import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
-import uuid
-import enum
 
 from app.db.session import Base
 
@@ -16,12 +17,15 @@ class JoinRequestStatus(str, enum.Enum):
 
 class Participant(Base):
     """Represents a user's participation in a specific competition"""
+
     __tablename__ = "participants"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    competition_id = Column(UUID(as_uuid=True), ForeignKey("competitions.id"), nullable=False, index=True)
+    competition_id = Column(
+        UUID(as_uuid=True), ForeignKey("competitions.id"), nullable=False, index=True
+    )
 
     # Scoring
     total_points = Column(Integer, default=0, nullable=False, index=True)
@@ -43,14 +47,19 @@ class Participant(Base):
 
 class JoinRequest(Base):
     """Join request for competitions with requiresApproval join type"""
+
     __tablename__ = "join_requests"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    competition_id = Column(UUID(as_uuid=True), ForeignKey("competitions.id"), nullable=False, index=True)
+    competition_id = Column(
+        UUID(as_uuid=True), ForeignKey("competitions.id"), nullable=False, index=True
+    )
 
-    status = Column(Enum(JoinRequestStatus), default=JoinRequestStatus.PENDING, nullable=False, index=True)
+    status = Column(
+        Enum(JoinRequestStatus), default=JoinRequestStatus.PENDING, nullable=False, index=True
+    )
 
     # Approval/rejection
     reviewed_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)

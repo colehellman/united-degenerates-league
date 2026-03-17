@@ -1,18 +1,30 @@
 import logging
+from contextlib import asynccontextmanager
 
 import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from contextlib import asynccontextmanager
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
+from app.api import (
+    admin,
+    auth,
+    bug_reports,
+    competitions,
+    health,
+    invite,
+    leaderboards,
+    leagues,
+    picks,
+    users,
+    ws,
+)
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.db.session import AsyncSessionLocal
-from app.api import auth, users, competitions, picks, leaderboards, admin, health, ws, leagues, bug_reports, invite
 
 # Import for lifespan
 from app.services.background_jobs import start_background_jobs, stop_background_jobs
@@ -39,7 +51,8 @@ if settings.ENVIRONMENT == "production" and settings.SENTRY_DSN:
 
 async def _seed_leagues_if_empty():
     """Auto-seed leagues on first boot. Idempotent — skips if leagues already exist."""
-    from sqlalchemy import select, func
+    from sqlalchemy import func, select
+
     from app.models.league import League, LeagueName
 
     async with AsyncSessionLocal() as db:
@@ -67,8 +80,13 @@ async def _seed_leagues_if_empty():
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events"""
     # Refuse to start with default secret key in production
-    if settings.ENVIRONMENT != "development" and settings.SECRET_KEY == "dev-secret-key-change-in-production":
-        raise RuntimeError("SECRET_KEY must be changed in production. Set the SECRET_KEY environment variable.")
+    if (
+        settings.ENVIRONMENT != "development"
+        and settings.SECRET_KEY == "dev-secret-key-change-in-production"
+    ):
+        raise RuntimeError(
+            "SECRET_KEY must be changed in production. Set the SECRET_KEY environment variable."
+        )
 
     logger.info("Starting United Degenerates League API...")
 
@@ -84,6 +102,7 @@ async def lifespan(app: FastAPI):
     # Always subscribe to Redis score channel so WebSocket clients
     # receive updates regardless of where the scheduler runs
     from app.services.ws_manager import score_manager
+
     await score_manager.start_subscriber()
 
     yield
@@ -198,6 +217,7 @@ async def health_check():
     # Check Redis
     try:
         import redis
+
         r = redis.from_url(settings.REDIS_URL)
         r.ping()
         r.close()

@@ -1,9 +1,21 @@
-from sqlalchemy import Boolean, Column, String, Integer, Float, DateTime, Enum, ForeignKey, JSON, UniqueConstraint
+import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
-import uuid
-import enum
 
 from app.db.session import Base
 
@@ -20,11 +32,13 @@ class GameStatus(str, enum.Enum):
 class Game(Base):
     __tablename__ = "games"
     __table_args__ = (
-        UniqueConstraint('competition_id', 'external_id', name='uq_game_competition_external_id'),
+        UniqueConstraint("competition_id", "external_id", name="uq_game_competition_external_id"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    competition_id = Column(UUID(as_uuid=True), ForeignKey("competitions.id"), nullable=False, index=True)
+    competition_id = Column(
+        UUID(as_uuid=True), ForeignKey("competitions.id"), nullable=False, index=True
+    )
 
     # External API identification
     external_id = Column(String, nullable=False, index=True)  # ID from sports API

@@ -1,14 +1,13 @@
-from typing import List, Optional
-from datetime import datetime
 import logging
+from datetime import datetime
 
+from app.core.config import settings
 from app.services.sports_api.base import (
-    BaseSportsAPIClient,
     APIProvider,
+    BaseSportsAPIClient,
     GameData,
     RateLimitExceededError,
 )
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,7 @@ class RapidAPIClient(BaseSportsAPIClient):
         league: str,
         start_date: datetime,
         end_date: datetime,
-    ) -> List[GameData]:
+    ) -> list[GameData]:
         """Fetch game schedule from RapidAPI"""
         try:
             host = self._map_league_name(league)
@@ -80,10 +79,10 @@ class RapidAPIClient(BaseSportsAPIClient):
         except RateLimitExceededError:
             raise
         except Exception as e:
-            logger.error(f"RapidAPI: Error fetching schedule for {league}: {str(e)}")
+            logger.error(f"RapidAPI: Error fetching schedule for {league}: {e!s}")
             return []
 
-    async def get_live_scores(self, league: str) -> List[GameData]:
+    async def get_live_scores(self, league: str) -> list[GameData]:
         """Fetch live scores from RapidAPI"""
         try:
             host = self._map_league_name(league)
@@ -115,10 +114,10 @@ class RapidAPIClient(BaseSportsAPIClient):
         except RateLimitExceededError:
             raise
         except Exception as e:
-            logger.error(f"RapidAPI: Error fetching live scores for {league}: {str(e)}")
+            logger.error(f"RapidAPI: Error fetching live scores for {league}: {e!s}")
             return []
 
-    async def get_game_details(self, league: str, game_id: str) -> Optional[GameData]:
+    async def get_game_details(self, league: str, game_id: str) -> GameData | None:
         """Fetch game details from RapidAPI"""
         try:
             host = self._map_league_name(league)
@@ -142,10 +141,10 @@ class RapidAPIClient(BaseSportsAPIClient):
         except RateLimitExceededError:
             raise
         except Exception as e:
-            logger.error(f"RapidAPI: Error fetching game {game_id}: {str(e)}")
+            logger.error(f"RapidAPI: Error fetching game {game_id}: {e!s}")
             return None
 
-    def _parse_game(self, game_data: dict, league: str) -> Optional[GameData]:
+    def _parse_game(self, game_data: dict, league: str) -> GameData | None:
         """Parse RapidAPI game data into standardized GameData"""
         try:
             # RapidAPI structure varies by sport, handle common patterns
@@ -204,5 +203,5 @@ class RapidAPIClient(BaseSportsAPIClient):
             )
 
         except Exception as e:
-            logger.error(f"RapidAPI: Error parsing game data: {str(e)}")
+            logger.error(f"RapidAPI: Error parsing game data: {e!s}")
             return None

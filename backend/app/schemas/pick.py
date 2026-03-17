@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field, UUID4
 from datetime import datetime
-from typing import Optional, List
+
+from pydantic import UUID4, BaseModel, Field
 
 
 class PickCreate(BaseModel):
@@ -9,7 +9,7 @@ class PickCreate(BaseModel):
 
 
 class PickBatchCreate(BaseModel):
-    picks: List[PickCreate] = Field(..., max_length=50)
+    picks: list[PickCreate] = Field(..., max_length=50)
 
 
 class PickUpdate(BaseModel):
@@ -23,8 +23,8 @@ class PickResponse(BaseModel):
     game_id: UUID4
     predicted_winner_team_id: UUID4
     is_locked: bool
-    locked_at: Optional[datetime] = None
-    is_correct: Optional[bool] = None
+    locked_at: datetime | None = None
+    is_correct: bool | None = None
     points_earned: int
     created_at: datetime
     updated_at: datetime
@@ -34,22 +34,22 @@ class PickResponse(BaseModel):
 
 
 class FixedTeamSelectionCreate(BaseModel):
-    team_id: Optional[UUID4] = None
-    golfer_id: Optional[UUID4] = None
+    team_id: UUID4 | None = None
+    golfer_id: UUID4 | None = None
 
 
 class FixedTeamSelectionBatchCreate(BaseModel):
-    selections: List[FixedTeamSelectionCreate] = Field(..., max_length=50)
+    selections: list[FixedTeamSelectionCreate] = Field(..., max_length=50)
 
 
 class FixedTeamSelectionResponse(BaseModel):
     id: UUID4
     user_id: UUID4
     competition_id: UUID4
-    team_id: Optional[UUID4] = None
-    golfer_id: Optional[UUID4] = None
+    team_id: UUID4 | None = None
+    golfer_id: UUID4 | None = None
     is_locked: bool
-    locked_at: Optional[datetime] = None
+    locked_at: datetime | None = None
     total_points: int
     created_at: datetime
 

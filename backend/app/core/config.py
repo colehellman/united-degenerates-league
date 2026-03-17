@@ -1,6 +1,5 @@
-from pydantic import field_validator, model_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
-from typing import List, Union
 
 
 class Settings(BaseSettings):
@@ -33,7 +32,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
 
     @property
-    def cors_origins_list(self) -> List[str]:
+    def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS string into a list."""
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
@@ -48,7 +47,7 @@ class Settings(BaseSettings):
             if self.SECRET_KEY == "dev-secret-key-change-in-production":
                 raise ValueError(
                     "SECRET_KEY must be changed from the default in production. "
-                    "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                    'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
                 )
             if "udl_password" in self.DATABASE_URL:
                 raise ValueError(

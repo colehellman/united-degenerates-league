@@ -4,20 +4,23 @@ deps, auth helpers, bug_reports, and user schemas to push coverage past 81%.
 
 import uuid
 from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import get_password_hash, create_access_token, create_refresh_token
-from app.models.user import User, UserRole, AccountStatus
-from app.models.competition import Competition, CompetitionStatus, Visibility, JoinType, CompetitionMode
+from app.core.security import create_access_token, create_refresh_token
+from app.models.competition import (
+    Competition,
+    CompetitionMode,
+    CompetitionStatus,
+    JoinType,
+    Visibility,
+)
 from app.models.participant import Participant
-from app.models.bug_report import BugReport
-
+from app.models.user import AccountStatus, User
 from tests.conftest import _login, _login_full, _make_global_admin
-
 
 # ---------------------------------------------------------------------------
 # users.py — update profile, change password, account deletion
@@ -264,12 +267,14 @@ async def test_leaderboard_private_non_participant(
 def test_blacklist_token_empty_jti():
     """Cover line 44-45: empty JTI returns immediately."""
     from app.services.token_blacklist import blacklist_token
+
     blacklist_token("")  # Should not raise
 
 
 def test_blacklist_token_expired():
     """Cover line 51-52: token already expired, skip blacklist."""
     from app.services.token_blacklist import blacklist_token
+
     past_exp = int((datetime.utcnow() - timedelta(hours=1)).timestamp())
     blacklist_token("expired-jti", exp=past_exp)  # Should skip
 
@@ -277,6 +282,7 @@ def test_blacklist_token_expired():
 def test_blacklist_token_with_ttl():
     """Cover lines 54-64: blacklist with TTL via Redis."""
     from app.services.token_blacklist import blacklist_token
+
     future_exp = int((datetime.utcnow() + timedelta(hours=1)).timestamp())
     blacklist_token("ttl-jti", exp=future_exp)
 
@@ -284,24 +290,28 @@ def test_blacklist_token_with_ttl():
 def test_blacklist_token_no_ttl():
     """Cover lines 60-62: blacklist without TTL (uses default)."""
     from app.services.token_blacklist import blacklist_token
+
     blacklist_token("no-ttl-jti")
 
 
 def test_is_token_blacklisted_empty_jti():
     """Cover line 76-77: empty JTI returns False."""
     from app.services.token_blacklist import is_token_blacklisted
+
     assert is_token_blacklisted("") is False
 
 
 def test_is_token_blacklisted_not_found():
     """Cover lines 79-84: check a JTI that isn't blacklisted."""
     from app.services.token_blacklist import is_token_blacklisted
+
     assert is_token_blacklisted(f"not-blacklisted-{uuid.uuid4()}") is False
 
 
 def test_is_token_blacklisted_found():
     """Cover lines 79-84: check a JTI that IS blacklisted."""
     from app.services.token_blacklist import blacklist_token, is_token_blacklisted
+
     jti = f"test-bl-{uuid.uuid4()}"
     future_exp = int((datetime.utcnow() + timedelta(hours=1)).timestamp())
     blacklist_token(jti, exp=future_exp)
@@ -311,24 +321,28 @@ def test_is_token_blacklisted_found():
 def test_blacklist_all_user_tokens():
     """Cover lines 99-106: blacklist all tokens for a user."""
     from app.services.token_blacklist import blacklist_all_user_tokens
+
     blacklist_all_user_tokens(str(uuid.uuid4()))
 
 
 def test_is_user_token_revoked_no_iat():
     """Cover lines 115-116: no iat returns False."""
     from app.services.token_blacklist import is_user_token_revoked
+
     assert is_user_token_revoked("some-user", None) is False
 
 
 def test_is_user_token_revoked_not_revoked():
     """Cover lines 118-126: user not revoked."""
     from app.services.token_blacklist import is_user_token_revoked
+
     assert is_user_token_revoked(str(uuid.uuid4()), int(datetime.utcnow().timestamp())) is False
 
 
 def test_is_user_token_revoked_after_revocation():
     """Cover lines 118-125: user IS revoked (token issued before revocation)."""
     from app.services.token_blacklist import blacklist_all_user_tokens, is_user_token_revoked
+
     user_id = str(uuid.uuid4())
     old_iat = int((datetime.utcnow() - timedelta(hours=1)).timestamp())
     blacklist_all_user_tokens(user_id)
@@ -337,7 +351,10 @@ def test_is_user_token_revoked_after_revocation():
 
 def test_blacklist_token_redis_failure():
     """Cover lines 65-71: Redis failure falls back to memory."""
-    from app.services.token_blacklist import blacklist_token, is_token_blacklisted, _memory_blacklist
+    from app.services.token_blacklist import (
+        _memory_blacklist,
+        blacklist_token,
+    )
 
     jti = f"redis-fail-{uuid.uuid4()}"
     future_exp = int((datetime.utcnow() + timedelta(hours=1)).timestamp())
@@ -355,7 +372,7 @@ def test_blacklist_token_redis_failure():
 
 def test_is_token_blacklisted_redis_failure():
     """Cover lines 85-90: Redis failure falls back to memory."""
-    from app.services.token_blacklist import is_token_blacklisted, _memory_blacklist
+    from app.services.token_blacklist import _memory_blacklist, is_token_blacklisted
 
     jti = f"redis-fail-check-{uuid.uuid4()}"
     _memory_blacklist.add(jti)
@@ -396,18 +413,21 @@ def test_blacklist_all_user_tokens_redis_failure():
 
 def test_get_redis_unavailable():
     """Cover lines 32-33: Redis unavailable returns None."""
-    from app.services.token_blacklist import _get_redis
 
-    with patch.dict("sys.modules", {"redis": MagicMock(**{"from_url.side_effect": Exception("Connection refused")})}):
+    with patch.dict(
+        "sys.modules",
+        {"redis": MagicMock(**{"from_url.side_effect": Exception("Connection refused")})},
+    ):
         # Force re-evaluation by patching at the function level
-        import importlib
         import app.services.token_blacklist as tb_mod
+
         with patch.object(tb_mod, "_get_redis", wraps=tb_mod._get_redis):
             pass
 
     # Simpler approach: just mock _get_redis to return None and test dependent functions
     with patch("app.services.token_blacklist._get_redis", return_value=None):
-        from app.services.token_blacklist import blacklist_token, _memory_blacklist
+        from app.services.token_blacklist import _memory_blacklist, blacklist_token
+
         jti = f"no-redis-{uuid.uuid4()}"
         blacklist_token(jti)
         assert jti in _memory_blacklist
@@ -569,9 +589,7 @@ async def test_login_wrong_email(client: AsyncClient, db_session: AsyncSession):
     assert resp.status_code == 401
 
 
-async def test_login_wrong_password(
-    client: AsyncClient, db_session: AsyncSession, test_user: User
-):
+async def test_login_wrong_password(client: AsyncClient, db_session: AsyncSession, test_user: User):
     """Cover auth.py lines 182-188: wrong password + failed login recording."""
     resp = await client.post(
         "/api/auth/login",
@@ -599,6 +617,7 @@ async def test_login_account_lockout(
 ):
     """Cover auth.py lines 68-77: account locked after too many attempts."""
     from app.core.config import settings
+
     test_user.failed_login_attempts = settings.AUTH_LOCKOUT_ATTEMPTS
     test_user.locked_until = datetime.utcnow() + timedelta(minutes=30)
     await db_session.commit()
@@ -649,9 +668,7 @@ async def test_refresh_blacklisted_token(
     from app.services.token_blacklist import blacklist_token
 
     jti = str(uuid.uuid4())
-    refresh_token = create_refresh_token(
-        data={"sub": str(test_user.id), "jti": jti}
-    )
+    refresh_token = create_refresh_token(data={"sub": str(test_user.id), "jti": jti})
     future_exp = int((datetime.utcnow() + timedelta(days=7)).timestamp())
     blacklist_token(jti, exp=future_exp)
 
@@ -663,14 +680,14 @@ async def test_refresh_blacklisted_token(
     assert "revoked" in resp.json()["detail"].lower()
 
 
-async def test_refresh_user_revoked(
-    client: AsyncClient, db_session: AsyncSession, test_user: User
-):
+async def test_refresh_user_revoked(client: AsyncClient, db_session: AsyncSession, test_user: User):
     """Cover auth.py lines 262-267: user tokens revoked (password change)."""
-    from jose import jwt
-    from app.core.security import REFRESH_SECRET_KEY, ALGORITHM
-    from app.services.token_blacklist import blacklist_all_user_tokens
     import time
+
+    from jose import jwt
+
+    from app.core.security import ALGORITHM, REFRESH_SECRET_KEY
+    from app.services.token_blacklist import blacklist_all_user_tokens
 
     jti = str(uuid.uuid4())
     old_iat = int(time.time()) - 3600  # 1 hour ago
@@ -698,9 +715,7 @@ async def test_refresh_user_revoked(
 async def test_refresh_user_not_found(client: AsyncClient, db_session: AsyncSession):
     """Cover auth.py lines 269-276: user not in DB."""
     jti = str(uuid.uuid4())
-    refresh_token = create_refresh_token(
-        data={"sub": str(uuid.uuid4()), "jti": jti}
-    )
+    refresh_token = create_refresh_token(data={"sub": str(uuid.uuid4()), "jti": jti})
 
     resp = await client.post(
         "/api/auth/refresh",
@@ -733,9 +748,7 @@ async def test_logout_no_token(client: AsyncClient, db_session: AsyncSession):
 # ---------------------------------------------------------------------------
 
 
-async def test_submit_bug_report(
-    client: AsyncClient, db_session: AsyncSession, test_user: User
-):
+async def test_submit_bug_report(client: AsyncClient, db_session: AsyncSession, test_user: User):
     """Cover bug_reports.py lines 22-32: submit report."""
     token = await _login(client)
     resp = await client.post(
@@ -751,9 +764,7 @@ async def test_submit_bug_report(
     assert resp.json()["title"] == "Test Bug Report Title"
 
 
-async def test_get_my_bug_reports(
-    client: AsyncClient, db_session: AsyncSession, test_user: User
-):
+async def test_get_my_bug_reports(client: AsyncClient, db_session: AsyncSession, test_user: User):
     """Cover bug_reports.py lines 41-47: get user's reports."""
     token = await _login(client)
     # Submit one first
@@ -852,7 +863,7 @@ async def test_register_password_no_special_char(client: AsyncClient, db_session
 
 async def test_register_common_password(client: AsyncClient, db_session: AsyncSession):
     """Cover schemas/user.py lines 32-33: common password rejected."""
-    resp = await client.post(
+    await client.post(
         "/api/auth/register",
         json={
             "email": "common@example.com",
@@ -861,7 +872,7 @@ async def test_register_common_password(client: AsyncClient, db_session: AsyncSe
         },
     )
     # Try with an actual common password with special char
-    resp = await client.post(
+    await client.post(
         "/api/auth/register",
         json={
             "email": "common@example.com",

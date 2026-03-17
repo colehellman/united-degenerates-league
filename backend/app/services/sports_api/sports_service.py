@@ -1,25 +1,24 @@
-from typing import List, Optional, Dict
-from datetime import datetime
 import asyncio
-import logging
 import json
+import logging
+from datetime import datetime
+
 import redis
 
+from app.core.config import settings
+from app.services.circuit_breaker import (
+    CircuitBreakerOpenError,
+    circuit_breaker_manager,
+)
 from app.services.sports_api.base import (
+    APIUnavailableError,
     BaseSportsAPIClient,
     GameData,
-    APIProvider,
     RateLimitExceededError,
-    APIUnavailableError,
 )
 from app.services.sports_api.espn_client import ESPNAPIClient
-from app.services.sports_api.theodds_client import TheOddsAPIClient
 from app.services.sports_api.rapidapi_client import RapidAPIClient
-from app.services.circuit_breaker import (
-    circuit_breaker_manager,
-    CircuitBreakerOpenError,
-)
-from app.core.config import settings
+from app.services.sports_api.theodds_client import TheOddsAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,7 @@ class SportsDataService:
 
     def __init__(self):
         # Initialize API clients in priority order
-        self.clients: List[BaseSportsAPIClient] = []
+        self.clients: list[BaseSportsAPIClient] = []
 
         # ESPN hidden API is always available (no key required).
         # If a key is set it will be passed as a query parameter,
@@ -75,7 +74,7 @@ class SportsDataService:
         start_date: datetime,
         end_date: datetime,
         use_cache: bool = True,
-    ) -> List[GameData]:
+    ) -> list[GameData]:
         """
         Fetch game schedule with automatic failover.
 
@@ -137,27 +136,23 @@ class SportsDataService:
                 continue
 
             except Exception as e:
-                logger.error(
-                    f"SportsDataService: {client.provider} failed: {str(e)}"
-                )
+                logger.error(f"SportsDataService: {client.provider} failed: {e!s}")
                 last_exception = e
                 continue
 
         # All APIs failed
         logger.error(
             f"SportsDataService: All APIs failed for schedule ({league}). "
-            f"Last error: {str(last_exception)}"
+            f"Last error: {last_exception!s}"
         )
 
-        raise APIUnavailableError(
-            f"Failed to fetch schedule for {league} from all API providers"
-        )
+        raise APIUnavailableError(f"Failed to fetch schedule for {league} from all API providers")
 
     async def get_live_scores(
         self,
         league: str,
         use_cache: bool = True,
-    ) -> List[GameData]:
+    ) -> list[GameData]:
         """
         Fetch live scores with automatic failover.
         """
@@ -214,16 +209,14 @@ class SportsDataService:
                 continue
 
             except Exception as e:
-                logger.error(
-                    f"SportsDataService: {client.provider} failed: {str(e)}"
-                )
+                logger.error(f"SportsDataService: {client.provider} failed: {e!s}")
                 last_exception = e
                 continue
 
         # All APIs failed
         logger.error(
             f"SportsDataService: All APIs failed for live scores ({league}). "
-            f"Last error: {str(last_exception)}"
+            f"Last error: {last_exception!s}"
         )
 
         raise APIUnavailableError(
@@ -235,7 +228,7 @@ class SportsDataService:
         league: str,
         game_id: str,
         use_cache: bool = True,
-    ) -> Optional[GameData]:
+    ) -> GameData | None:
         """
         Fetch game details with automatic failover.
         """
@@ -277,13 +270,13 @@ class SportsDataService:
             except (CircuitBreakerOpenError, RateLimitExceededError):
                 continue
             except Exception as e:
-                logger.error(f"SportsDataService: {client.provider} failed: {str(e)}")
+                logger.error(f"SportsDataService: {client.provider} failed: {e!s}")
                 continue
 
         logger.error(f"SportsDataService: All APIs failed for game {game_id}")
         return None
 
-    def get_api_health_status(self) -> Dict:
+    def get_api_health_status(self) -> dict:
         """Get health status of all API providers and circuit breakers"""
         return {
             "configured_apis": [client.provider for client in self.clients],
@@ -291,7 +284,7 @@ class SportsDataService:
             "cache_status": "connected" if self.redis_client else "disconnected",
         }
 
-    async def _get_from_cache(self, key: str) -> Optional[str]:
+    async def _get_from_cache(self, key: str) -> str | None:
         """Get value from Redis cache (runs sync client in executor to avoid blocking)"""
         if not self.redis_client:
             return None
@@ -313,7 +306,7 @@ class SportsDataService:
         except Exception as e:
             logger.error(f"Redis set error: {e}")
 
-    def _serialize_games(self, games: List[GameData]) -> str:
+    def _serialize_games(self, games: list[GameData]) -> str:
         """Serialize GameData objects to JSON for Redis cache.
 
         Only stores fields relevant to competition rules -- no raw API bloat.
@@ -347,7 +340,7 @@ class SportsDataService:
             data.append(game_dict)
         return json.dumps(data)
 
-    def _deserialize_games(self, data: str) -> List[GameData]:
+    def _deserialize_games(self, data: str) -> list[GameData]:
         """Deserialize JSON to GameData objects.
 
         Failures are isolated per-game so a single bad cache entry does not
@@ -366,9 +359,7 @@ class SportsDataService:
                     external_id=game_dict["external_id"],
                     home_team=game_dict["home_team"],
                     away_team=game_dict["away_team"],
-                    scheduled_start_time=datetime.fromisoformat(
-                        game_dict["scheduled_start_time"]
-                    ),
+                    scheduled_start_time=datetime.fromisoformat(game_dict["scheduled_start_time"]),
                     status=game_dict["status"],
                     home_score=game_dict.get("home_score"),
                     away_score=game_dict.get("away_score"),

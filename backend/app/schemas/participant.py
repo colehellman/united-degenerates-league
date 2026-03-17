@@ -1,6 +1,6 @@
-from pydantic import BaseModel, UUID4
 from datetime import datetime
-from typing import Optional
+
+from pydantic import UUID4, BaseModel
 
 
 class ParticipantResponse(BaseModel):
@@ -13,7 +13,7 @@ class ParticipantResponse(BaseModel):
     accuracy_percentage: float
     current_streak: int
     joined_at: datetime
-    last_pick_at: Optional[datetime] = None
+    last_pick_at: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -64,9 +64,9 @@ class JoinRequestResponse(BaseModel):
     user_id: UUID4
     competition_id: UUID4
     status: str
-    reviewed_by_user_id: Optional[UUID4] = None
-    reviewed_at: Optional[datetime] = None
-    rejection_reason: Optional[str] = None
+    reviewed_by_user_id: UUID4 | None = None
+    reviewed_at: datetime | None = None
+    rejection_reason: str | None = None
     created_at: datetime
 
     class Config:

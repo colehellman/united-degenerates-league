@@ -1,5 +1,6 @@
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
+
 from app.core.config import settings
 
 # Convert postgres:// or postgresql:// to postgresql+asyncpg:// and strip
@@ -12,7 +13,8 @@ if database_url.startswith("postgres://"):
 elif database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 if "sslmode=" in database_url:
-    from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
+    from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+
     parsed = urlparse(database_url)
     params = {k: v[0] for k, v in parse_qs(parsed.query).items() if k != "sslmode"}
     database_url = urlunparse(parsed._replace(query=urlencode(params)))

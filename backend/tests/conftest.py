@@ -1,24 +1,26 @@
-import pytest
-from datetime import datetime, timedelta
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.user import User, UserRole, AccountStatus
-from app.models.competition import (
-    Competition, CompetitionMode, CompetitionStatus, Visibility, JoinType,
-)
-from app.models.league import League, LeagueName, Team
-from app.models.participant import Participant
-from app.core.security import get_password_hash
 import asyncio
+from datetime import datetime, timedelta
+
+import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import get_password_hash
 from app.db.session import async_session, engine
-from typing import AsyncGenerator
-from fastapi import Depends
-from app.core.deps import get_db
-from fastapi.security import HTTPAuthorizationCredentials
 from app.main import app
+from app.models.competition import (
+    Competition,
+    CompetitionMode,
+    CompetitionStatus,
+    JoinType,
+    Visibility,
+)
 from app.models.game import Game, GameStatus
 from app.models.invite_link import InviteLink
+from app.models.league import League, LeagueName, Team
+from app.models.participant import Participant
+from app.models.user import AccountStatus, User, UserRole
 
 
 @pytest.fixture(scope="session")
@@ -41,11 +43,13 @@ async def db_session():
     Before each test, all tables are truncated so tests are fully isolated.
     """
     async with engine.begin() as conn:
-        await conn.execute(text(
-            "TRUNCATE TABLE picks, fixed_team_selections, join_requests, "
-            "invite_links, participants, games, competitions, golfers, teams, "
-            "leagues, audit_logs, bug_reports, users CASCADE"
-        ))
+        await conn.execute(
+            text(
+                "TRUNCATE TABLE picks, fixed_team_selections, join_requests, "
+                "invite_links, participants, games, competitions, golfers, teams, "
+                "leagues, audit_logs, bug_reports, users CASCADE"
+            )
+        )
 
     async with async_session() as session:
         yield session
@@ -59,7 +63,6 @@ async def client():
     Uses ASGITransport which does NOT invoke the app lifespan,
     so background jobs and Redis subscribers are not started.
     """
-    from app.main import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -125,10 +128,20 @@ async def test_league_2(db_session: AsyncSession):
 @pytest.fixture
 async def test_teams(db_session: AsyncSession, test_league: League):
     teams = [
-        Team(league_id=test_league.id, name="Team A", city="City A",
-             abbreviation="TA", external_id="team_a"),
-        Team(league_id=test_league.id, name="Team B", city="City B",
-             abbreviation="TB", external_id="team_b"),
+        Team(
+            league_id=test_league.id,
+            name="Team A",
+            city="City A",
+            abbreviation="TA",
+            external_id="team_a",
+        ),
+        Team(
+            league_id=test_league.id,
+            name="Team B",
+            city="City B",
+            abbreviation="TB",
+            external_id="team_b",
+        ),
     ]
     db_session.add_all(teams)
     await db_session.commit()
@@ -214,8 +227,11 @@ async def participant(db_session: AsyncSession, test_user: User, active_competit
     await db_session.refresh(p)
     return p
 
+
 @pytest.fixture
-async def test_game(db_session: AsyncSession, active_competition: Competition, test_teams: list[Team]):
+async def test_game(
+    db_session: AsyncSession, active_competition: Competition, test_teams: list[Team]
+):
     """Create a test game"""
     game = Game(
         competition_id=active_competition.id,
@@ -232,13 +248,18 @@ async def test_game(db_session: AsyncSession, active_competition: Competition, t
     await db_session.refresh(game)
     return game
 
-async def _login(client: AsyncClient, email: str = "test@example.com", password: str = "Password123") -> str:
+
+async def _login(
+    client: AsyncClient, email: str = "test@example.com", password: str = "Password123"
+) -> str:
     """Login and return the access token."""
     resp = await client.post("/api/auth/login", json={"email": email, "password": password})
     return resp.json()["access_token"]
 
 
-async def _login_full(client: AsyncClient, email: str = "test@example.com", password: str = "Password123") -> dict:
+async def _login_full(
+    client: AsyncClient, email: str = "test@example.com", password: str = "Password123"
+) -> dict:
     """Login and return the full token response."""
     resp = await client.post("/api/auth/login", json={"email": email, "password": password})
     return resp.json()
@@ -253,7 +274,12 @@ async def _make_global_admin(db_session: AsyncSession, user: User) -> User:
 
 
 @pytest.fixture
-async def invite_link(db_session: AsyncSession, active_competition: Competition, test_user: User, participant: Participant):
+async def invite_link(
+    db_session: AsyncSession,
+    active_competition: Competition,
+    test_user: User,
+    participant: Participant,
+):
     """Invite link created by test_user (who is admin of active_competition).
     is_admin_invite=True because test_user is in league_admin_ids.
     """
@@ -269,7 +295,9 @@ async def invite_link(db_session: AsyncSession, active_competition: Competition,
 
 
 @pytest.fixture
-async def participant_invite_link(db_session: AsyncSession, active_competition: Competition, second_user: User):
+async def participant_invite_link(
+    db_session: AsyncSession, active_competition: Competition, second_user: User
+):
     """Invite link created by second_user (regular participant, not admin).
     is_admin_invite=False.
     Requires second_user to be a participant first.

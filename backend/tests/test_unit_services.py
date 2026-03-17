@@ -6,37 +6,38 @@ Covers:
 - app/core/security.py
 - app/services/sports_api/base.py
 """
-import pytest
+
+import contextlib
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
-import httpx
 
+import httpx
+import pytest
+
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    get_password_hash,
+    verify_password,
+    verify_token,
+)
 from app.services.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerManager,
     CircuitBreakerOpenError,
     CircuitState,
 )
-from app.core.security import (
-    create_access_token,
-    create_refresh_token,
-    verify_token,
-    verify_password,
-    get_password_hash,
-)
 from app.services.sports_api.base import (
-    BaseSportsAPIClient,
     APIProvider,
+    BaseSportsAPIClient,
     GameData,
     RateLimitExceededError,
-    APIUnavailableError,
 )
-
 
 # ── Circuit Breaker ──────────────────────────────────────────────────────────
 
-class TestCircuitBreaker:
 
+class TestCircuitBreaker:
     def test_initial_state_is_closed(self):
         cb = CircuitBreaker("test", failure_threshold=3, timeout_seconds=60)
         assert cb.state == CircuitState.CLOSED
@@ -57,27 +58,21 @@ class TestCircuitBreaker:
     def test_trips_on_threshold(self):
         cb = CircuitBreaker("test", failure_threshold=2)
         for _ in range(2):
-            try:
+            with contextlib.suppress(RuntimeError):
                 cb.call(lambda: (_ for _ in ()).throw(RuntimeError("fail")))
-            except RuntimeError:
-                pass
         assert cb.state == CircuitState.OPEN
 
     def test_open_rejects_call_before_timeout(self):
         cb = CircuitBreaker("test", failure_threshold=1, timeout_seconds=3600)
-        try:
+        with contextlib.suppress(RuntimeError):
             cb.call(lambda: (_ for _ in ()).throw(RuntimeError("fail")))
-        except RuntimeError:
-            pass
         with pytest.raises(CircuitBreakerOpenError):
             cb.call(lambda: "should not run")
 
     def test_open_transitions_to_half_open_after_timeout(self):
         cb = CircuitBreaker("test", failure_threshold=1, timeout_seconds=0)
-        try:
+        with contextlib.suppress(RuntimeError):
             cb.call(lambda: (_ for _ in ()).throw(RuntimeError("fail")))
-        except RuntimeError:
-            pass
         # Now state is OPEN. Since timeout=0, should_attempt_reset is True.
         # Next call transitions to HALF_OPEN.
         result = cb.call(lambda: "recovered")
@@ -86,24 +81,18 @@ class TestCircuitBreaker:
 
     def test_half_open_failure_trips_again(self):
         cb = CircuitBreaker("test", failure_threshold=1, timeout_seconds=0)
-        try:
+        with contextlib.suppress(RuntimeError):
             cb.call(lambda: (_ for _ in ()).throw(RuntimeError("fail")))
-        except RuntimeError:
-            pass
         # Force HALF_OPEN
         cb.state = CircuitState.HALF_OPEN
-        try:
+        with contextlib.suppress(RuntimeError):
             cb.call(lambda: (_ for _ in ()).throw(RuntimeError("still failing")))
-        except RuntimeError:
-            pass
         assert cb.state == CircuitState.OPEN
 
     def test_manual_reset(self):
         cb = CircuitBreaker("test", failure_threshold=1)
-        try:
+        with contextlib.suppress(RuntimeError):
             cb.call(lambda: (_ for _ in ()).throw(RuntimeError("fail")))
-        except RuntimeError:
-            pass
         assert cb.state == CircuitState.OPEN
         cb.reset()
         assert cb.state == CircuitState.CLOSED
@@ -119,10 +108,8 @@ class TestCircuitBreaker:
 
     def test_get_status_open(self):
         cb = CircuitBreaker("svc", failure_threshold=1, timeout_seconds=60)
-        try:
+        with contextlib.suppress(RuntimeError):
             cb.call(lambda: (_ for _ in ()).throw(RuntimeError()))
-        except RuntimeError:
-            pass
         status = cb.get_status()
         assert status["state"] == CircuitState.OPEN
         assert status["last_failure_time"] is not None
@@ -200,7 +187,6 @@ class TestCircuitBreaker:
 
 
 class TestCircuitBreakerManager:
-
     def test_get_breaker_creates_new(self):
         mgr = CircuitBreakerManager()
         cb = mgr.get_breaker("api_x", failure_threshold=3, timeout_seconds=30)
@@ -233,8 +219,8 @@ class TestCircuitBreakerManager:
 
 # ── Security ─────────────────────────────────────────────────────────────────
 
-class TestSecurity:
 
+class TestSecurity:
     def test_create_access_token_contains_type(self):
         token = create_access_token({"sub": "user123"})
         payload = verify_token(token, "access")
@@ -280,6 +266,7 @@ class TestSecurity:
 
 # ── Base Sports API Client ────────────────────────────────────────────────────
 
+
 class ConcreteClient(BaseSportsAPIClient):
     """Minimal concrete subclass for testing BaseSportsAPIClient."""
 
@@ -300,7 +287,6 @@ class ConcreteClient(BaseSportsAPIClient):
 
 
 class TestBaseSportsAPIClient:
-
     def test_parse_datetime_iso(self):
         client = ConcreteClient()
         dt = client._parse_datetime("2023-01-15T18:30:00Z")
@@ -347,9 +333,7 @@ class TestBaseSportsAPIClient:
         client = ConcreteClient()
         mock_response = MagicMock()
         mock_response.status_code = 404
-        http_error = httpx.HTTPStatusError(
-            "Not Found", request=MagicMock(), response=mock_response
-        )
+        http_error = httpx.HTTPStatusError("Not Found", request=MagicMock(), response=mock_response)
         with patch.object(client.client, "request", new_callable=AsyncMock) as mock_req:
             mock_req.return_value = mock_response
             mock_response.raise_for_status.side_effect = http_error
@@ -370,10 +354,13 @@ class TestBaseSportsAPIClient:
     @pytest.mark.asyncio
     async def test_make_request_timeout_raises(self):
         from tenacity import RetryError
+
         client = ConcreteClient()
         with patch.object(
-            client.client, "request", new_callable=AsyncMock,
-            side_effect=httpx.TimeoutException("timed out")
+            client.client,
+            "request",
+            new_callable=AsyncMock,
+            side_effect=httpx.TimeoutException("timed out"),
         ):
             # tenacity retries API_MAX_RETRIES times then wraps in RetryError
             with pytest.raises(RetryError):
@@ -388,7 +375,6 @@ class TestBaseSportsAPIClient:
 
 
 class TestGameData:
-
     def test_game_data_defaults(self):
         now = datetime.utcnow()
         gd = GameData(

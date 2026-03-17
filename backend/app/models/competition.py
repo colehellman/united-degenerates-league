@@ -1,9 +1,10 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Enum, ForeignKey, JSON
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
-from sqlalchemy.orm import relationship
-from datetime import datetime
-import uuid
 import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.orm import relationship
 
 from app.db.session import Base
 
@@ -38,7 +39,9 @@ class Competition(Base):
 
     # Mode and status
     mode = Column(Enum(CompetitionMode), nullable=False)
-    status = Column(Enum(CompetitionStatus), default=CompetitionStatus.UPCOMING, nullable=False, index=True)
+    status = Column(
+        Enum(CompetitionStatus), default=CompetitionStatus.UPCOMING, nullable=False, index=True
+    )
 
     # Associated league (NFL, NBA, etc.)
     league_id = Column(UUID(as_uuid=True), ForeignKey("leagues.id"), nullable=False, index=True)
@@ -59,12 +62,16 @@ class Competition(Base):
     max_picks_per_day = Column(Integer, nullable=True)  # Only for daily_picks mode
 
     # Fixed Teams settings
-    max_teams_per_participant = Column(Integer, nullable=True)  # Only for fixed_teams mode (team sports)
+    max_teams_per_participant = Column(
+        Integer, nullable=True
+    )  # Only for fixed_teams mode (team sports)
     max_golfers_per_participant = Column(Integer, nullable=True)  # Only for PGA tournaments
 
     # Creator and admins
     creator_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    league_admin_ids = Column(ARRAY(UUID(as_uuid=True)), default=[], nullable=False)  # Additional admins
+    league_admin_ids = Column(
+        ARRAY(UUID(as_uuid=True)), default=[], nullable=False
+    )  # Additional admins
 
     # Winner (set manually after tie-breaker if needed)
     winner_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
@@ -76,9 +83,17 @@ class Competition(Base):
     # Relationships
     league = relationship("League", back_populates="competitions")
     creator = relationship("User", back_populates="created_competitions", foreign_keys=[creator_id])
-    participants = relationship("Participant", back_populates="competition", cascade="all, delete-orphan")
+    participants = relationship(
+        "Participant", back_populates="competition", cascade="all, delete-orphan"
+    )
     games = relationship("Game", back_populates="competition", cascade="all, delete-orphan")
     picks = relationship("Pick", back_populates="competition", cascade="all, delete-orphan")
-    fixed_team_selections = relationship("FixedTeamSelection", back_populates="competition", cascade="all, delete-orphan")
-    join_requests = relationship("JoinRequest", back_populates="competition", cascade="all, delete-orphan")
-    invite_links = relationship("InviteLink", back_populates="competition", cascade="all, delete-orphan")
+    fixed_team_selections = relationship(
+        "FixedTeamSelection", back_populates="competition", cascade="all, delete-orphan"
+    )
+    join_requests = relationship(
+        "JoinRequest", back_populates="competition", cascade="all, delete-orphan"
+    )
+    invite_links = relationship(
+        "InviteLink", back_populates="competition", cascade="all, delete-orphan"
+    )

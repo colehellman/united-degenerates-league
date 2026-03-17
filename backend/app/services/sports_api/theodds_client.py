@@ -1,14 +1,13 @@
-from typing import List, Optional
-from datetime import datetime
 import logging
+from datetime import datetime
 
+from app.core.config import settings
 from app.services.sports_api.base import (
-    BaseSportsAPIClient,
     APIProvider,
+    BaseSportsAPIClient,
     GameData,
     RateLimitExceededError,
 )
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ class TheOddsAPIClient(BaseSportsAPIClient):
         league: str,
         start_date: datetime,
         end_date: datetime,
-    ) -> List[GameData]:
+    ) -> list[GameData]:
         """Fetch game schedule from The Odds API"""
         try:
             sport_key = self._map_league_name(league)
@@ -57,10 +56,8 @@ class TheOddsAPIClient(BaseSportsAPIClient):
             if isinstance(response, list):
                 for event in response:
                     game_data = self._parse_event(event)
-                    if game_data:
-                        # Filter by date range
-                        if start_date <= game_data.scheduled_start_time <= end_date:
-                            games.append(game_data)
+                    if game_data and start_date <= game_data.scheduled_start_time <= end_date:
+                        games.append(game_data)
 
             logger.info(f"TheOddsAPI: Fetched {len(games)} games for {league}")
             return games
@@ -68,10 +65,10 @@ class TheOddsAPIClient(BaseSportsAPIClient):
         except RateLimitExceededError:
             raise
         except Exception as e:
-            logger.error(f"TheOddsAPI: Error fetching schedule for {league}: {str(e)}")
+            logger.error(f"TheOddsAPI: Error fetching schedule for {league}: {e!s}")
             return []
 
-    async def get_live_scores(self, league: str) -> List[GameData]:
+    async def get_live_scores(self, league: str) -> list[GameData]:
         """Fetch live scores from The Odds API"""
         try:
             sport_key = self._map_league_name(league)
@@ -100,10 +97,10 @@ class TheOddsAPIClient(BaseSportsAPIClient):
         except RateLimitExceededError:
             raise
         except Exception as e:
-            logger.error(f"TheOddsAPI: Error fetching live scores for {league}: {str(e)}")
+            logger.error(f"TheOddsAPI: Error fetching live scores for {league}: {e!s}")
             return []
 
-    async def get_game_details(self, league: str, game_id: str) -> Optional[GameData]:
+    async def get_game_details(self, league: str, game_id: str) -> GameData | None:
         """
         The Odds API doesn't have individual game endpoints,
         so we fetch from the scores endpoint and filter
@@ -130,10 +127,10 @@ class TheOddsAPIClient(BaseSportsAPIClient):
         except RateLimitExceededError:
             raise
         except Exception as e:
-            logger.error(f"TheOddsAPI: Error fetching game {game_id}: {str(e)}")
+            logger.error(f"TheOddsAPI: Error fetching game {game_id}: {e!s}")
             return None
 
-    def _extract_odds(self, event: dict) -> tuple[Optional[float], Optional[float]]:
+    def _extract_odds(self, event: dict) -> tuple[float | None, float | None]:
         """Extract spread and over/under from bookmaker data.
 
         Prefers DraftKings, falls back to FanDuel, then first available.
@@ -178,7 +175,7 @@ class TheOddsAPIClient(BaseSportsAPIClient):
 
         return spread, over_under
 
-    def _parse_event(self, event: dict) -> Optional[GameData]:
+    def _parse_event(self, event: dict) -> GameData | None:
         """Parse The Odds API event data (from odds endpoint)"""
         try:
             home_team = event.get("home_team", "")
@@ -189,7 +186,9 @@ class TheOddsAPIClient(BaseSportsAPIClient):
 
             # Parse datetime
             commence_time = event.get("commence_time", "")
-            scheduled_time = self._parse_datetime(commence_time) if commence_time else datetime.utcnow()
+            scheduled_time = (
+                self._parse_datetime(commence_time) if commence_time else datetime.utcnow()
+            )
 
             spread, over_under = self._extract_odds(event)
 
@@ -208,10 +207,10 @@ class TheOddsAPIClient(BaseSportsAPIClient):
             )
 
         except Exception as e:
-            logger.error(f"TheOddsAPI: Error parsing event: {str(e)}")
+            logger.error(f"TheOddsAPI: Error parsing event: {e!s}")
             return None
 
-    def _parse_score_event(self, event: dict) -> Optional[GameData]:
+    def _parse_score_event(self, event: dict) -> GameData | None:
         """Parse The Odds API score data (from scores endpoint)"""
         try:
             home_team = event.get("home_team", "")
@@ -233,7 +232,9 @@ class TheOddsAPIClient(BaseSportsAPIClient):
 
             # Parse datetime
             commence_time = event.get("commence_time", "")
-            scheduled_time = self._parse_datetime(commence_time) if commence_time else datetime.utcnow()
+            scheduled_time = (
+                self._parse_datetime(commence_time) if commence_time else datetime.utcnow()
+            )
 
             # Determine status
             completed = event.get("completed", False)
@@ -252,5 +253,5 @@ class TheOddsAPIClient(BaseSportsAPIClient):
             )
 
         except Exception as e:
-            logger.error(f"TheOddsAPI: Error parsing score event: {str(e)}")
+            logger.error(f"TheOddsAPI: Error parsing score event: {e!s}")
             return None

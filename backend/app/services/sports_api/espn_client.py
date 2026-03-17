@@ -1,14 +1,13 @@
-from typing import List, Optional
-from datetime import datetime
 import logging
+from datetime import datetime
 
+from app.core.config import settings
 from app.services.sports_api.base import (
-    BaseSportsAPIClient,
     APIProvider,
+    BaseSportsAPIClient,
     GameData,
     RateLimitExceededError,
 )
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ class ESPNAPIClient(BaseSportsAPIClient):
         league: str,
         start_date: datetime,
         end_date: datetime,
-    ) -> List[GameData]:
+    ) -> list[GameData]:
         """Fetch game schedule from ESPN API"""
         try:
             league_path = self._map_league_name(league)
@@ -68,10 +67,10 @@ class ESPNAPIClient(BaseSportsAPIClient):
         except RateLimitExceededError:
             raise
         except Exception as e:
-            logger.error(f"ESPN: Error fetching schedule for {league}: {str(e)}")
+            logger.error(f"ESPN: Error fetching schedule for {league}: {e!s}")
             return []
 
-    async def get_live_scores(self, league: str) -> List[GameData]:
+    async def get_live_scores(self, league: str) -> list[GameData]:
         """Fetch today's scoreboard from ESPN API.
 
         Returns ALL games (scheduled, in-progress, final) so the background
@@ -101,10 +100,10 @@ class ESPNAPIClient(BaseSportsAPIClient):
         except RateLimitExceededError:
             raise
         except Exception as e:
-            logger.error(f"ESPN: Error fetching scores for {league}: {str(e)}")
+            logger.error(f"ESPN: Error fetching scores for {league}: {e!s}")
             return []
 
-    async def get_game_details(self, league: str, game_id: str) -> Optional[GameData]:
+    async def get_game_details(self, league: str, game_id: str) -> GameData | None:
         """Fetch game details from ESPN API"""
         try:
             league_path = self._map_league_name(league)
@@ -125,10 +124,10 @@ class ESPNAPIClient(BaseSportsAPIClient):
         except RateLimitExceededError:
             raise
         except Exception as e:
-            logger.error(f"ESPN: Error fetching game {game_id}: {str(e)}")
+            logger.error(f"ESPN: Error fetching game {game_id}: {e!s}")
             return None
 
-    def _parse_event(self, event: dict) -> Optional[GameData]:
+    def _parse_event(self, event: dict) -> GameData | None:
         """Parse ESPN event data into standardized GameData"""
         try:
             competitions = event.get("competitions", [])
@@ -216,7 +215,7 @@ class ESPNAPIClient(BaseSportsAPIClient):
                     if o.get("provider", {}).get("name", "").lower() == "draftkings":
                         odds = o
                         break
-                
+
                 over_under = odds.get("overUnder")
                 # ESPN spread is a float. It doesn't explicitly state 'home' vs 'away'
                 # perspective in the raw float, but the 'details' string often does.
@@ -226,7 +225,7 @@ class ESPNAPIClient(BaseSportsAPIClient):
                 # If 'details' says "LAL -4.5" and LAL is away, home spread is +4.5.
                 raw_spread = odds.get("spread")
                 details = odds.get("details", "")
-                
+
                 if raw_spread is not None:
                     spread = float(raw_spread)
                     # If the details string mentions the AWAY team's abbreviation
@@ -234,12 +233,12 @@ class ESPNAPIClient(BaseSportsAPIClient):
                     # away team is the favorite, and the HOME spread should be positive.
                     away_abbr = away_team.get("abbreviation", "")
                     if away_abbr and details.startswith(away_abbr):
-                        # If the details string starts with away abbreviation and the 
+                        # If the details string starts with away abbreviation and the
                         # spread is negative, it means away is favored.
                         # raw_spread is usually the absolute value of the favorite's spread
                         # in some API versions, but in others it's already signed.
                         # Testing shows ESPN's 'spread' field is usually the favorite's spread (negative).
-                        # So if details="AWAY -4.5", spread=-4.5. 
+                        # So if details="AWAY -4.5", spread=-4.5.
                         # To get home perspective: if away is -4.5, home is +4.5.
                         spread = -spread
 
@@ -271,5 +270,5 @@ class ESPNAPIClient(BaseSportsAPIClient):
             )
 
         except Exception as e:
-            logger.error(f"ESPN: Error parsing event: {str(e)}")
+            logger.error(f"ESPN: Error parsing event: {e!s}")
             return None

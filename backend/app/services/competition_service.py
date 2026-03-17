@@ -1,13 +1,15 @@
 import logging
 from datetime import datetime
-from sqlalchemy import select, and_, update
+
+from sqlalchemy import and_, select, update
 from sqlalchemy.orm import selectinload
 
 from app.models.competition import Competition, CompetitionStatus
-from app.models.game import Game, GameStatus
+from app.models.game import GameStatus
 from app.models.pick import FixedTeamSelection
 
 logger = logging.getLogger(__name__)
+
 
 async def update_competition_statuses(db):
     """
@@ -17,14 +19,8 @@ async def update_competition_statuses(db):
     now = datetime.utcnow()
 
     # Transition UPCOMING -> ACTIVE
-    stmt = (
-        select(Competition)
-        .where(
-            and_(
-                Competition.status == CompetitionStatus.UPCOMING,
-                Competition.start_date <= now
-            )
-        )
+    stmt = select(Competition).where(
+        and_(Competition.status == CompetitionStatus.UPCOMING, Competition.start_date <= now)
     )
     result = await db.execute(stmt)
     upcoming_comps = result.scalars().all()
@@ -40,12 +36,7 @@ async def update_competition_statuses(db):
     # Transition ACTIVE -> COMPLETED
     stmt = (
         select(Competition)
-        .where(
-            and_(
-                Competition.status == CompetitionStatus.ACTIVE,
-                Competition.end_date <= now
-            )
-        )
+        .where(and_(Competition.status == CompetitionStatus.ACTIVE, Competition.end_date <= now))
         .options(selectinload(Competition.games))
     )
     result = await db.execute(stmt)
@@ -54,7 +45,8 @@ async def update_competition_statuses(db):
     for comp in active_comps:
         # Check if all games are finished
         all_finished = all(
-            game.status in [GameStatus.FINAL, GameStatus.CANCELLED, GameStatus.POSTPONED, GameStatus.NO_RESULT]
+            game.status
+            in [GameStatus.FINAL, GameStatus.CANCELLED, GameStatus.POSTPONED, GameStatus.NO_RESULT]
             for game in comp.games
         )
 
@@ -67,6 +59,7 @@ async def update_competition_statuses(db):
                 f"Competition {comp.id} ({comp.name}) end date passed but games still in progress"
             )
 
+
 async def _lock_fixed_team_selections(db, competition_id):
     """Lock all fixed team selections for a competition that just started."""
     now = datetime.utcnow()
@@ -76,13 +69,10 @@ async def _lock_fixed_team_selections(db, competition_id):
         .where(
             and_(
                 FixedTeamSelection.competition_id == competition_id,
-                FixedTeamSelection.is_locked.is_(False)
+                FixedTeamSelection.is_locked.is_(False),
             )
         )
-        .values(
-            is_locked=True,
-            locked_at=now
-        )
+        .values(is_locked=True, locked_at=now)
     )
     result = await db.execute(stmt)
     locked_count = result.rowcount
