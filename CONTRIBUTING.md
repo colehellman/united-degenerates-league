@@ -66,6 +66,7 @@ pytest tests/ -v --tb=short
 cd frontend && npm test
 
 # Frontend E2E tests (requires full stack running)
+cd frontend && npx playwright install chromium  # first time only
 cd frontend && npx playwright test
 
 # Backend linting
@@ -134,7 +135,6 @@ Every PR runs:
 | **frontend-build** | TypeScript check, Vite build, Vitest |
 | **e2e** | Playwright tests against full stack |
 | **sync-docs** | Auto-updates documentation markers |
-| **ruff** | Python linting and format checking |
 
 All checks must pass before merging.
 

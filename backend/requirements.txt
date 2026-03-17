@@ -26,4 +26,3 @@ faker==22.5.1
 
 # Linting & formatting
 ruff==0.9.10
-pre-commit==4.2.0
