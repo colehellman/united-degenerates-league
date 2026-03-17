@@ -39,7 +39,7 @@ test.describe("Competition Flow", () => {
 
     // Fill the form
     const compName = `E2E Test Comp ${Date.now()}`;
-    await page.getByLabel(/^name$/i).fill(compName);
+    await page.getByLabel(/competition name/i).fill(compName);
     await page.getByLabel(/description/i).fill("E2E test competition");
 
     // Select a league (wait for leagues to load)
