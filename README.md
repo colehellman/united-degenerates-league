@@ -1,5 +1,11 @@
 # United Degenerates League (UDL)
 
+[![CI](https://github.com/colehellman/united-degenerates-league/actions/workflows/ci.yml/badge.svg)](https://github.com/colehellman/united-degenerates-league/actions/workflows/ci.yml)
+[![E2E Tests](https://github.com/colehellman/united-degenerates-league/actions/workflows/e2e.yml/badge.svg)](https://github.com/colehellman/united-degenerates-league/actions/workflows/e2e.yml)
+[![Lighthouse CI](https://github.com/colehellman/united-degenerates-league/actions/workflows/lighthouse.yml/badge.svg)](https://github.com/colehellman/united-degenerates-league/actions/workflows/lighthouse.yml)
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://udl-frontend.onrender.com)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A comprehensive sports prediction and competition platform for friends to compete in daily picks and fixed team challenges across multiple sports leagues (NFL, NBA, MLB, NHL, NCAA, PGA).
 
 ## Features
