@@ -19,7 +19,8 @@ test.describe("Competition Flow", () => {
   });
 
   test("navigate to competitions page from dashboard", async ({ page }) => {
-    await page.getByRole("link", { name: /browse competitions/i }).click();
+    // Dashboard has two "Browse Competitions" links — use first()
+    await page.getByRole("link", { name: /browse competitions/i }).first().click();
     await expect(page).toHaveURL("/competitions");
     await expect(page.getByRole("heading", { name: /competitions/i })).toBeVisible();
   });
@@ -28,9 +29,9 @@ test.describe("Competition Flow", () => {
     await page.getByRole("link", { name: /create competition/i }).click();
     await expect(page).toHaveURL("/competitions/create");
 
-    // Form fields should be present
-    await expect(page.getByLabel(/name/i)).toBeVisible();
-    await expect(page.getByText(/daily picks/i)).toBeVisible();
+    // Form heading and mode select should be present
+    await expect(page.getByRole("heading", { name: /create competition/i })).toBeVisible();
+    await expect(page.getByLabel(/competition mode/i)).toBeVisible();
   });
 
   test("create a daily picks competition", async ({ page }) => {
