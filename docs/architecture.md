@@ -1,0 +1,215 @@
+# System Architecture
+
+## High-Level Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          CLIENTS                                    │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
+│  │   Browser     │  │  Mobile Web  │  │   Admin      │              │
+│  │  (React SPA)  │  │  (React SPA) │  │  Dashboard   │              │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘              │
+└─────────┼──────────────────┼──────────────────┼─────────────────────┘
+          │                  │                  │
+          │  HTTPS (REST + WebSocket)           │
+          ▼                  ▼                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     RENDER CDN (Static Site)                        │
+│                     Frontend: React + Vite                          │
+└─────────────────────────────┬───────────────────────────────────────┘
+                              │
+                              │  HTTPS
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     RENDER WEB SERVICE                              │
+│                                                                     │
+│  ┌────────────────────────────────────────────────────────────┐     │
+│  │                    FastAPI Application                      │     │
+│  │                                                            │     │
+│  │  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌──────────┐ │     │
+│  │  │  CORS    │→ │  Rate    │→ │  Security │→ │  Router  │ │     │
+│  │  │Middleware│  │ Limiter  │  │  Headers  │  │          │ │     │
+│  │  └──────────┘  └──────────┘  └───────────┘  └────┬─────┘ │     │
+│  │                                                    │       │     │
+│  │  ┌─────────────────────────────────────────────────┼─────┐ │     │
+│  │  │              API Routes                         │     │ │     │
+│  │  │  ┌──────┐ ┌──────┐ ┌──────────┐ ┌───────────┐  │     │ │     │
+│  │  │  │ Auth │ │Users │ │Competitions│ │   Picks   │  │     │ │     │
+│  │  │  └──────┘ └──────┘ └──────────┘ └───────────┘  │     │ │     │
+│  │  │  ┌──────┐ ┌──────┐ ┌──────────┐ ┌───────────┐  │     │ │     │
+│  │  │  │Leagues│ │Admin │ │Leaderboard│ │Bug Reports│  │     │ │     │
+│  │  │  └──────┘ └──────┘ └──────────┘ └───────────┘  │     │ │     │
+│  │  │  ┌──────┐ ┌──────┐                             │     │ │     │
+│  │  │  │Invite│ │  WS  │ (WebSocket /ws/scores)      │     │ │     │
+│  │  │  └──────┘ └──────┘                             │     │ │     │
+│  │  └─────────────────────────────────────────────────┘     │ │     │
+│  │                         │                                 │ │     │
+│  │  ┌──────────────────────┼────────────────────────────┐   │ │     │
+│  │  │          Service Layer                            │   │ │     │
+│  │  │  ┌────────────────┐  ┌────────────────────────┐   │   │ │     │
+│  │  │  │ Auth & Security│  │  Competition Service    │   │   │ │     │
+│  │  │  │ (JWT, bcrypt)  │  │  (lifecycle, scoring)   │   │   │ │     │
+│  │  │  └────────────────┘  └────────────────────────┘   │   │ │     │
+│  │  │  ┌────────────────┐  ┌────────────────────────┐   │   │ │     │
+│  │  │  │  Pick Service  │  │   Score Service        │   │   │ │     │
+│  │  │  │  (validation)  │  │   (result calc)        │   │   │ │     │
+│  │  │  └────────────────┘  └────────────────────────┘   │   │ │     │
+│  │  │  ┌────────────────┐  ┌────────────────────────┐   │   │ │     │
+│  │  │  │  Sports API    │  │   WebSocket Manager    │   │   │ │     │
+│  │  │  │  (multi-provider│  │   (Redis pub/sub)     │   │   │ │     │
+│  │  │  │   + failover)  │  │                        │   │   │ │     │
+│  │  │  └────────────────┘  └────────────────────────┘   │   │ │     │
+│  │  └───────────────────────────────────────────────────┘   │ │     │
+│  │                         │                                 │ │     │
+│  │  ┌──────────────────────┼────────────────────────────┐   │ │     │
+│  │  │      Background Jobs (APScheduler)                │   │ │     │
+│  │  │  ┌──────────────┐ ┌──────────────┐ ┌──────────┐  │   │ │     │
+│  │  │  │Score Updates │ │ Competition  │ │  Pick    │  │   │ │     │
+│  │  │  │  (60s)       │ │ Transitions  │ │ Locking  │  │   │ │     │
+│  │  │  └──────────────┘ │  (5min)      │ │  (60s)   │  │   │ │     │
+│  │  │  ┌──────────────┐ └──────────────┘ └──────────┘  │   │ │     │
+│  │  │  │Account Cleanup│                                │   │ │     │
+│  │  │  │ (daily 2AM)  │                                │   │ │     │
+│  │  │  └──────────────┘                                │   │ │     │
+│  │  └───────────────────────────────────────────────────┘   │ │     │
+│  └──────────────────────────────────────────────────────────┘ │     │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │
+            ┌───────────────────┼───────────────────┐
+            ▼                   ▼                   ▼
+┌───────────────────┐ ┌─────────────────┐ ┌─────────────────────────┐
+│   PostgreSQL 15   │ │   Redis 7       │ │   Sports Data APIs      │
+│   (Neon - free)   │ │  (Upstash)      │ │                         │
+│                   │ │                 │ │  ┌───────────────────┐  │
+│  • Users          │ │  • Token        │ │  │ ESPN (primary)    │  │
+│  • Competitions   │ │    blacklist    │ │  │ free, no key      │  │
+│  • Games          │ │  • Score        │ │  └─────────┬─────────┘  │
+│  • Picks          │ │    pub/sub      │ │            │ failover   │
+│  • Leagues/Teams  │ │  • Rate limit   │ │  ┌─────────▼─────────┐  │
+│  • Participants   │ │    counters     │ │  │ The Odds API      │  │
+│  • Invite Links   │ │                 │ │  │ (secondary)       │  │
+│  • Audit Logs     │ │                 │ │  └─────────┬─────────┘  │
+│  • Bug Reports    │ │                 │ │            │ failover   │
+│                   │ │                 │ │  ┌─────────▼─────────┐  │
+│  UUID PKs         │ │                 │ │  │ RapidAPI          │  │
+│  Async (asyncpg)  │ │                 │ │  │ (tertiary)        │  │
+│  Alembic migrations│ │                │ │  └───────────────────┘  │
+└───────────────────┘ └─────────────────┘ │                         │
+                                          │  Circuit breaker per    │
+                                          │  provider (5 failures   │
+                                          │  → 60s cooldown)        │
+                                          └─────────────────────────┘
+```
+
+## Data Flow
+
+### Authentication
+```
+Browser → POST /api/auth/login → JWT access (30min) + refresh (7d)
+        → httpOnly cookies + Bearer header (dual-mode)
+        → Mobile Safari ITP fallback: localStorage refresh token
+```
+
+### Making a Pick
+```
+Browser → POST /api/picks
+        → Validate: competition active, game not started, within daily limit
+        → Store pick in PostgreSQL
+        → Background job locks picks at game start time
+```
+
+### Live Score Updates
+```
+Sports API → Background Job (60s) → Redis PUBLISH scores
+                                        │
+Redis SUBSCRIBE ← WebSocket Manager ←───┘
+        │
+        ▼
+  All connected /ws/scores clients receive updates
+```
+
+### Competition Lifecycle
+```
+DRAFT → ACTIVE → COMPLETED → ARCHIVED
+         │           │
+         │    Background job transitions
+         │    competitions based on end_date
+         │
+    Picks accepted     Final scores calculated
+    during this phase  and leaderboards frozen
+```
+
+## Frontend Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│                  React 18 SPA                    │
+│                                                  │
+│  ┌────────────────────────────────────────────┐  │
+│  │              React Router v6               │  │
+│  │  / → Dashboard    /competitions → List     │  │
+│  │  /login           /competitions/:id        │  │
+│  │  /register        /competitions/create     │  │
+│  │  /admin           /invite/:token           │  │
+│  └────────────────────────────────────────────┘  │
+│                                                  │
+│  ┌──────────────┐  ┌─────────────────────────┐  │
+│  │   Zustand    │  │    TanStack Query       │  │
+│  │  Auth Store  │  │  Server State Cache     │  │
+│  │  (user,      │  │  (competitions, picks,  │  │
+│  │   tokens)    │  │   leaderboards, games)  │  │
+│  └──────────────┘  └─────────────────────────┘  │
+│                                                  │
+│  ┌────────────────────────────────────────────┐  │
+│  │          Axios HTTP Client                 │  │
+│  │  • Auto token refresh on 401              │  │
+│  │  • Bearer header injection                │  │
+│  │  • Cross-origin cookie support            │  │
+│  │  • Toast error notifications              │  │
+│  └────────────────────────────────────────────┘  │
+│                                                  │
+│  ┌────────────────────────────────────────────┐  │
+│  │     WebSocket (useLiveScores hook)         │  │
+│  │  • Auto-reconnect with backoff            │  │
+│  │  • Live score updates via /ws/scores      │  │
+│  └────────────────────────────────────────────┘  │
+│                                                  │
+│  Tailwind CSS 3.3 │ Vite 5.0 │ TypeScript 5.2   │
+└─────────────────────────────────────────────────┘
+```
+
+## CI/CD Pipeline
+
+```
+Push/PR to main
+       │
+       ├─→ CI Workflow
+       │     ├─ Backend: pytest (async, Postgres + Redis)
+       │     ├─ Backend: ruff check + ruff format --check
+       │     └─ Frontend: tsc + vite build + vitest
+       │
+       ├─→ E2E Workflow
+       │     ├─ Spin up Postgres + Redis services
+       │     ├─ Start backend (uvicorn)
+       │     ├─ Build + serve frontend
+       │     └─ Playwright tests (auth, competitions, navigation)
+       │
+       ├─→ Sync Docs Workflow
+       │     └─ Auto-update README.md + CLAUDE.md markers
+       │
+       └─→ Render Deploy (on merge to main)
+             ├─ API: Docker → Render Web Service
+             └─ Frontend: Vite build → Render Static Site (CDN)
+```
+
+## Key Design Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Auth strategy | JWT in httpOnly cookies + Bearer fallback | Works across desktop and mobile Safari (ITP blocks cross-origin cookies) |
+| Sports data | Multi-provider with circuit breaker | ESPN is free but unreliable; failover chain ensures availability |
+| Real-time updates | WebSocket + Redis pub/sub | Decouples score fetching (background job) from delivery (WebSocket) |
+| Database | PostgreSQL + async SQLAlchemy | Strong consistency for picks/scores; async for concurrency |
+| Background jobs | APScheduler in-process | Simple deployment on free tier; can split to separate worker for scale |
+| Frontend state | Zustand (auth) + TanStack Query (server) | Zustand for synchronous auth checks; TQ for cache/refetch/stale management |
+| Deployment | Render free tier | Zero-cost with CDN-backed static frontend (never sleeps) |
