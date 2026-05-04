@@ -16,7 +16,7 @@ APScheduler==3.10.4
 python-dotenv==1.0.0
 tenacity==8.2.3
 slowapi==0.1.9
-sentry-sdk[fastapi]==1.40.0
+sentry-sdk[fastapi]==2.54.0
 
 # Testing dependencies
 pytest==7.4.4
